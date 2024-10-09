@@ -12,6 +12,12 @@
   },
   "content_scripts": [
     {
+      "js": ["lib/window.js"],
+      "matches": ["<all_urls>"],
+      "world": "MAIN",
+      "run_at": "document_start"
+    },
+    {
       "js": ["lib/components.js", "lib/log.js", "scripts/content.js"],
       "matches": ["<all_urls>"]
     }
