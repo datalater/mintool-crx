@@ -26,6 +26,8 @@ const COMMANDS = {
 };
 
 (function main() {
+  if (!document.body) return;
+
   execute();
 
   const observer = new MutationObserver((mutations) => {
