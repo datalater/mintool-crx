@@ -102,8 +102,8 @@ function addCommentShortcuts() {
   let currentComment = null;
   const timeout = 10_000;
 
-  const issueCommentClass = ".js-timeline-progressive-focus-container";
   const threeDotButtonClass = ".details-overlay";
+  const timelineCommentClass = `.timeline-comment:has(${threeDotButtonClass})`;
   const editButtonClass = ".js-comment-edit-button";
   const cancelButtonClass = ".js-comment-cancel-button";
 
@@ -144,7 +144,7 @@ function addCommentShortcuts() {
   };
 
   document.addEventListener("click", (e) => {
-    const comment = e.target.closest(issueCommentClass);
+    const comment = e.target.closest(timelineCommentClass);
     if (!comment) return;
 
     currentComment = comment;
