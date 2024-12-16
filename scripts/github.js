@@ -14,7 +14,96 @@
   /*                                                */
   /**************************************************/
   addCommentShortcuts();
+
+  addPrCommitLinksAutoEmbed();
 })();
+
+async function addPrCommitLinksAutoEmbed() {
+  if (!isPullDetailPage()) return;
+  if (!isAuthorDatalater()) return;
+
+  await waitForDomLoaded();
+
+  const timeout = 10_000;
+
+  // TODO: regex에 동적으로 넣어야 한다.
+  const titleForCommitLinks = "리뷰 요청 항목";
+
+  const prBodyClass = ".js-command-palette-pull-body";
+  const prBody = document.querySelector(prBodyClass);
+
+  if (!prBody) return;
+
+  const prPushedCommitClass =
+    "[id*='commits-pushed'] ~ *:has(.octicon-git-commit) .markdown-title[href*='/pull/'][href*='/commits/']";
+  const prPushedCommits = document.querySelectorAll(prPushedCommitClass);
+
+  if (isPrCommitsIncluded()) return;
+
+  const confirmed = confirm(
+    "PR 설명에 PR 커밋이 모두 포함되지 않았습니다. 업데이트하시겠습니까? (기존 내용은 콘솔에 출력됩니다)"
+  );
+  if (!confirmed) return;
+
+  await enterEditMode();
+  await insertPrCommits();
+  updateComment();
+
+  function enterEditMode() {
+    const threeDotButtonClass = ".details-overlay";
+    const editButtonClass = ".js-comment-edit-button";
+
+    const threeDotButton = prBody.querySelector(threeDotButtonClass);
+    threeDotButton.open = "true";
+
+    return new Promise((resolve) => {
+      waitForElement(threeDotButton, editButtonClass, timeout).then(
+        (editButton) => {
+          editButton.click();
+          resolve();
+        }
+      );
+    });
+  }
+
+  function insertPrCommits() {
+    const PR_COMMITS_SLOT_RE = /## 리뷰 요청 항목[\s\S]*?##/;
+
+    const prBodyTextareaClass = 'textarea[name="pull_request[body]"]';
+
+    return new Promise((resolve) => {
+      waitForElement(prBody, prBodyTextareaClass, timeout).then(
+        (prBodyTextarea) => {
+          const originalValue = prBodyTextarea.value;
+          console.log(originalValue);
+
+          // TODO: 내용을 덮어쓰면 기존에 추가된 설명이 사라질 수 있다. 따라서 덮어쓰지 않고 더 나은 방식으로 업데이트할 수 있을지 고민해보자.
+          const newValue = originalValue.replace(
+            PR_COMMITS_SLOT_RE,
+            `## 리뷰 요청 항목\n\n${Array.from(prPushedCommits)
+              .map((commit) => `- [${commit.textContent}](${commit.href})`)
+              .join("\n")}\n\n##`
+          );
+
+          prBodyTextarea.value = newValue;
+          resolve();
+        }
+      );
+    });
+  }
+
+  function updateComment() {
+    const submitButtonClass = "button[type='submit']";
+    const submitButton = prBody.querySelector(submitButtonClass);
+    submitButton.click();
+  }
+
+  function isPrCommitsIncluded() {
+    return Array.from(prPushedCommits).every((commit) =>
+      Boolean(prBody.querySelector(`a[href*="${commit.href}"]`))
+    );
+  }
+}
 
 function injectStyles() {
   const style = document.createElement("style");
@@ -233,6 +322,10 @@ function isPullsPage() {
   return location.pathname.includes("/pulls");
 }
 
+function isPullDetailPage() {
+  return location.pathname.includes("/pull/");
+}
+
 function isNotificationPage() {
   return location.pathname.includes("/notifications");
 }
@@ -246,4 +339,14 @@ async function waitForDomLoaded() {
 
     window.addEventListener("load", resolve);
   });
+}
+
+function isMergedPr() {
+  return Boolean(document.querySelector('[title="Status: Merged"]'));
+}
+
+function isAuthorDatalater() {
+  return Boolean(
+    document.querySelector("a.author").textContent === "datalater"
+  );
 }
