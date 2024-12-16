@@ -4,8 +4,8 @@ const BLOCKED_LIST = [
       ".google-auto-placed", // tistory.com
       ".revenue_unit_wrap", // tistory.com
       ".adsbygoogle", // tistory.com
-      "[data-gg-moat]", // diffchecker.com
-      "[class*='ad-google']", // diffchecker.com
+      // "[data-gg-moat]", // diffchecker.com
+      // "[class*='ad-google']", // diffchecker.com
     ],
     origin: "",
     command: "remove",
