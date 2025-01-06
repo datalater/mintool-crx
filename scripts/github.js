@@ -35,7 +35,7 @@ async function addPrCommitLinksAutoEmbed() {
   if (!prBody) return;
 
   const prPushedCommitClass =
-    "[id*='commits-pushed'] ~ *:has(.octicon-git-commit) .markdown-title[href*='/pull/'][href*='/commits/']";
+    ".TimelineItem:has(.octicon-git-commit) .markdown-title[href*='/pull/'][href*='/commits/']";
   const prPushedCommits = document.querySelectorAll(prPushedCommitClass);
 
   if (isPrCommitsIncluded()) return;
