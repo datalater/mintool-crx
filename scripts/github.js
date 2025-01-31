@@ -38,8 +38,12 @@ async function addPrCommitLinksAutoEmbed() {
   const prPushedCommitClass =
     ".TimelineItem:has(.octicon-git-commit) .markdown-title[href*='/pull/'][href*='/commits/']";
   const prPushedCommits = document.querySelectorAll(prPushedCommitClass);
+  const uniquePrPushedCommits = Array.from(prPushedCommits).filter(
+    (commit, index, self) =>
+      index === self.findIndex((t) => t.href === commit.href)
+  );
 
-  if (isPrCommitsIncluded()) return;
+  if (isPrCommitsIncluded(uniquePrPushedCommits)) return;
 
   const confirmed = confirm(
     "PR 설명에 PR 커밋이 모두 포함되지 않았습니다. 업데이트하시겠습니까? (기존 내용은 콘솔에 출력됩니다)"
@@ -81,8 +85,15 @@ async function addPrCommitLinksAutoEmbed() {
           // TODO: 내용을 덮어쓰면 기존에 추가된 설명이 사라질 수 있다. 따라서 덮어쓰지 않고 더 나은 방식으로 업데이트할 수 있을지 고민해보자.
           const newValue = originalValue.replace(
             PR_COMMITS_SLOT_RE,
-            `## 리뷰 요청 항목\n\n${Array.from(prPushedCommits)
-              .map((commit) => `- [${commit.textContent}](${commit.href})`)
+            `## 리뷰 요청 항목\n\n${uniquePrPushedCommits
+              .map(
+                (commit) =>
+                  `- [${commit
+                    .closest("code")
+                    .textContent.trim()
+                    .replace(/\[/g, "\\[")
+                    .replace(/\]/g, "\\]")}](${commit.href})`
+              )
               .join("\n")}\n\n##`
           );
 
@@ -99,8 +110,8 @@ async function addPrCommitLinksAutoEmbed() {
     submitButton.click();
   }
 
-  function isPrCommitsIncluded() {
-    return Array.from(prPushedCommits).every((commit) =>
+  function isPrCommitsIncluded(uniquePrPushedCommits) {
+    return uniquePrPushedCommits.every((commit) =>
       Boolean(prBody.querySelector(`a[href*="${commit.href}"]`))
     );
   }
