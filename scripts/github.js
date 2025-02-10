@@ -25,7 +25,7 @@ async function addPrCommitLinksAutoEmbed() {
 
   await waitForDomLoaded();
 
-  const timeout = 10_000;
+  const timeout = 5_000;
 
   // TODO: regex에 동적으로 넣어야 한다.
   const titleForCommitLinks = "리뷰 요청 항목";
@@ -201,7 +201,7 @@ async function addNotificationFilters() {
 
 function addCommentShortcutsInIssue() {
   let currentComment = null;
-  const timeout = 10_000;
+  const timeout = 5_000;
 
   const threeDotButtonSelector =
     '[data-component="IconButton"][aria-haspopup]:has(.octicon-kebab-horizontal)';
