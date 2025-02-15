@@ -28,7 +28,13 @@
       "matches": ["<all_urls>"]
     },
     {
-      "js": ["lib/github/github-context.js"],
+      "js": [
+        "lib/github/github-context.js",
+        "lib/github/github-auto-refresh.js",
+        "lib/github/github-notification-filters.js",
+        "lib/github/github-comment-shortcut.js",
+        "lib/github/github-pr-commit-auto-embed.js"
+      ],
       "matches": ["<all_urls>"]
     },
     {
