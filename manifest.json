@@ -22,8 +22,13 @@
         "lib/global.js",
         "lib/components.js",
         "lib/log.js",
-        "lib/wait-for-element.js"
+        "lib/wait-for-element.js",
+        "lib/dom-utils.js"
       ],
+      "matches": ["<all_urls>"]
+    },
+    {
+      "js": ["lib/github/github-context.js"],
       "matches": ["<all_urls>"]
     },
     {
