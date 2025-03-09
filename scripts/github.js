@@ -19,4 +19,4 @@
   run();
 
   ctx.observerUrlChange(run);
-})();
+})(githubContext);
