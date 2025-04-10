@@ -1,3 +1,8 @@
+const COMMAND = Object.freeze({
+  remove: "remove",
+  "display: none": "display: none",
+});
+
 const BLOCKED_LIST = [
   {
     selectors: [
@@ -8,25 +13,25 @@ const BLOCKED_LIST = [
       // "[class*='ad-google']", // diffchecker.com
     ],
     origin: "",
-    command: "remove",
+    command: COMMAND.remove,
   },
   {
     selectors: [".spacing_log_question_page_ad"],
     origin: "https://www.quora.com",
-    command: "display: none",
+    command: COMMAND["display: none"],
   },
   {
     selectors: [".ceriad", '[id*="google_ads_iframe"]'],
     origin: "https://tetr.io",
-    command: "remove",
+    command: COMMAND.remove,
   },
 ];
 
 const COMMANDS = {
-  "display: none": (element) => {
+  [COMMAND["display: none"]]: (element) => {
     element.style.display = "none";
   },
-  remove: (element) => {
+  [COMMAND.remove]: (element) => {
     element.remove();
   },
 };
