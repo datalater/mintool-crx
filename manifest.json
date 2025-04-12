@@ -23,7 +23,8 @@
         "lib/components.js",
         "lib/log.js",
         "lib/wait-for-element.js",
-        "lib/dom-utils.js"
+        "lib/dom-utils.js",
+        "lib/vue-min.js"
       ],
       "matches": ["<all_urls>"]
     },
