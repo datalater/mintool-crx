@@ -5,7 +5,7 @@
   mintool.observeUrlChange(runner);
 
   function runner() {
-    cleanups.forEach((cleanup) => cleanup());
+    cleanup();
 
     if (!isTossInvestPage()) return;
 
@@ -22,7 +22,7 @@
 
     const PERCENT = 0.02;
 
-    waitForElement(document.body, SELECTORS.priceWrapper, 2_000).then(() => {
+    waitForElement(document.body, SELECTORS.priceWrapper, 8_000).then(() => {
       displayPriceRanger(SELECTORS, PERCENT);
     });
   }
@@ -108,5 +108,10 @@
 
   function isStockPage() {
     return location.pathname.includes("/stock");
+  }
+
+  function cleanup() {
+    cleanups.forEach((cleanup) => cleanup());
+    cleanups.length = 0;
   }
 })();
