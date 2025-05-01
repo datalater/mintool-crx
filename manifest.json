@@ -39,8 +39,16 @@
       "matches": ["<all_urls>"]
     },
     {
-      "js": ["scripts/ad-block.js", "scripts/github.js"],
+      "js": ["scripts/ad-block.js"],
       "matches": ["<all_urls>"]
+    },
+    {
+      "js": ["scripts/github.js"],
+      "matches": ["https://github.com/*"]
+    },
+    {
+      "js": ["scripts/tossinvest.js"],
+      "matches": ["https://tossinvest.com/*"]
     }
   ]
 }
