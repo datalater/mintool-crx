@@ -49,6 +49,10 @@
     {
       "js": ["scripts/tossinvest.js"],
       "matches": ["https://tossinvest.com/*"]
+    },
+    {
+      "js": ["scripts/jira.js"],
+      "matches": ["https://*.atlassian.net/*", "https://atlassian.net/*"]
     }
   ]
 }
