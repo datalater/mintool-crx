@@ -2,3 +2,8 @@
 .vscode
 dist
 node_modules
+
+# _metadata:
+# - Chrome이 declarativeNetRequest 규칙을 로드할 때 생성하는 캐시 디렉터리
+# - 크롬에서 확장을 새로고침할 때마다 다시 생성되므로 Git에 포함할 필요가 없음
+_metadata

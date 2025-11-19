@@ -45,3 +45,7 @@ PNG 이미지를 아이콘으로 변환하기:
 
 - https://pixlr.com/kr/express/
 - https://www.iloveimg.com/resize-image/resize-png#resize-options,pixels
+
+네트워크 요청 차단 (ex. 광고 스크립트):
+
+- [Chrome for Developers - chrome.declarativeNetRequest](https://developer.chrome.com/docs/extensions/reference/api/declarativeNetRequest?hl=ko)

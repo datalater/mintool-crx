@@ -10,6 +10,16 @@
     "48": "images/icon-48.png",
     "128": "images/icon-128.png"
   },
+  "permissions": ["declarativeNetRequest"],
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "adblock_rules",
+        "enabled": true,
+        "path": "rules/adblock-rules.json"
+      }
+    ]
+  },
   "content_scripts": [
     {
       "js": ["lib/global.js", "lib/toastify.js"],
