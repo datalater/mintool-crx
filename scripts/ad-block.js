@@ -13,13 +13,12 @@ const BLOCKED_LIST = [
       '[id*="criteo"]', // criteo ads
       // "[data-gg-moat]", // diffchecker.com
       // "[class*='ad-google']", // diffchecker.com
-      "[data-google-query-id]", // general google ads
       // "script[src*='ads']", // general ads script
       // "iframe[src*='ads']", // general ads iframe
+      // "[data-google-query-id]", // general google ads
       "script[src*='ezad']", // ezad script
       "script[src*='ezoic']", // ezad script
       "script[src*='ezodn']", // ezad script
-      "script[src*='anyflip']", // general ads script
       "iframe[src*='ezoic']", // general ads iframe
       "[id*='ezoic']", // general ads iframe
     ],
