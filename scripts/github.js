@@ -13,6 +13,7 @@
 
     ctx.addCommentShortcutsInIssue();
     ctx.addCommentShortcutsInPr();
+    ctx.addShortcutsInPr();
     ctx.addPrCommitLinksAutoEmbed();
   }
 
