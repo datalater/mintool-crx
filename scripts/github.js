@@ -19,5 +19,5 @@
 
   run();
 
-  ctx.observerUrlChange(run);
+  ctx.observeUrlChange(run);
 })(githubContext);
