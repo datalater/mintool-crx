@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "default_locale": "en",
   "name": "MinTool",
-  "version": "1.0",
+  "version": "2.0.0",
   "author": "Min <the7mincheol@gmail.com>",
   "description": "Toolbox for anything",
   "icons": {
@@ -11,7 +11,7 @@
     "48": "images/icon-48.png",
     "128": "images/icon-128.png"
   },
-  "permissions": ["declarativeNetRequest", "activeTab"],
+  "permissions": ["declarativeNetRequest", "activeTab", "contextMenus"],
   "background": {
     "service_worker": "background.js"
   },
@@ -41,6 +41,8 @@
         "lib/log.js",
         "lib/wait-for-element.js",
         "lib/dom-utils.js",
+        "lib/toastify.js",
+        "lib/dom-eraser.js",
         "lib/vue-min.js"
       ],
       "matches": ["<all_urls>"]
