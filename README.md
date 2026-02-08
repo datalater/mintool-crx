@@ -14,19 +14,19 @@
       "js": ["lib/global.js"],
       "matches": ["<all_urls>"],
       "world": "MAIN",
-      "run_at": "document_start"
+      "run_at": "document_start",
     },
     // content script에서 사용할 전역 변수를 추가합니다.
     // - 효과: content script에서 선언한 모든 변수는 다른 content script에서 사용할 수 있습니다.
     {
       "js": ["lib/global.js", "lib/components.js", "lib/log.js"],
-      "matches": ["<all_urls>"]
+      "matches": ["<all_urls>"],
     },
     {
       "js": ["scripts/ad-block.js", "scripts/github.js"],
-      "matches": ["<all_urls>"]
-    }
-  ]
+      "matches": ["<all_urls>"],
+    },
+  ],
 }
 ```
 
