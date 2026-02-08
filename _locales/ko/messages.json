@@ -1,0 +1,10 @@
+{
+  "open_popup_title": {
+    "message": "현재 탭을 팝업으로 열기",
+    "description": "Menu item title"
+  },
+  "open_popup_tooltip": {
+    "message": "주소창이나 북마크바가 없는 새 창에서 현재 페이지를 엽니다.",
+    "description": "Tooltip for the menu item"
+  }
+}

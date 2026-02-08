@@ -1,5 +1,6 @@
 {
   "manifest_version": 3,
+  "default_locale": "en",
   "name": "MinTool",
   "version": "1.0",
   "author": "Min <the7mincheol@gmail.com>",
@@ -14,7 +15,9 @@
   "background": {
     "service_worker": "background.js"
   },
-  "action": {},
+  "action": {
+    "default_popup": "popup/popup.html"
+  },
   "declarative_net_request": {
     "rule_resources": [
       {

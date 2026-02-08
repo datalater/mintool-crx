@@ -1,0 +1,10 @@
+{
+  "open_popup_title": {
+    "message": "Open current tab with popup",
+    "description": "Menu item title"
+  },
+  "open_popup_tooltip": {
+    "message": "Opens the current tab in a new window without the address bar or bookmarks bar.",
+    "description": "Tooltip for the menu item"
+  }
+}
