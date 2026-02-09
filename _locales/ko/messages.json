@@ -6,5 +6,13 @@
   "open_popup_tooltip": {
     "message": "주소창이나 북마크바가 없는 새 창에서 현재 페이지를 엽니다.",
     "description": "Tooltip for the menu item"
+  },
+  "open_qa_scenario_title": {
+    "message": "QA 시나리오 열기",
+    "description": "Menu item title"
+  },
+  "open_qa_scenario_tooltip": {
+    "message": "JSON 기반 QA 시나리오를 관리하고 체크리스트를 확인할 수 있는 창을 엽니다.",
+    "description": "Tooltip for the QA scenario menu item"
   }
 }

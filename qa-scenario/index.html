@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QA Scenario Checker</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <header class="app-header">
+            <div class="logo">
+                <span class="icon">📋</span>
+                <h1>QA Scenario Checker</h1>
+            </div>
+            <div class="header-controls">
+                <div id="save-indicator" class="save-indicator is-saved" role="status" aria-live="polite">
+                    <span class="save-indicator-dot" aria-hidden="true"></span>
+                    <span id="save-indicator-label">Saved</span>
+                </div>
+                <div class="actions">
+                    <button id="btn-import" class="btn btn-secondary">
+                        <span class="btn-icon">📥</span> Import
+                    </button>
+                    <button id="btn-export" class="btn btn-secondary">
+                        <span class="btn-icon">📤</span> Export
+                    </button>
+                    <input type="file" id="file-input" style="display: none;" accept=".json">
+                </div>
+            </div>
+        </header>
+
+        <main class="app-content">
+            <button id="btn-fold-editor" class="btn-fold-toggle" title="Toggle Editor">
+                <svg class="fold-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M10 12L6 8L10 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </button>
+            <section class="pane editor-pane" id="editor-pane">
+                <div class="pane-header">
+                    <h2>JSON Editor</h2>
+                    <div class="editor-header-controls">
+                        <button id="btn-repair" class="btn btn-warning btn-editor-action btn-editor-repair is-hidden" aria-hidden="true">
+                            <span class="btn-icon">🔧</span> Repair
+                        </button>
+                        <button id="btn-format" class="btn btn-primary btn-editor-action">
+                            <span class="btn-icon">✨</span> Format
+                        </button>
+                        <div class="status-badge" id="json-status">Valid</div>
+                    </div>
+                </div>
+                <div class="editor-workspace">
+                    <aside class="file-tree-panel">
+                        <div class="tree-toolbar">
+                            <div class="tree-toolbar-left">
+                                <button id="btn-new-folder" class="tree-btn" type="button">New Folder</button>
+                                <button id="btn-new-file" class="tree-btn" type="button">New File</button>
+                            </div>
+                            <button id="btn-toggle-folders" class="tree-btn tree-btn-ghost" type="button">Collapse</button>
+                        </div>
+                        <div class="tree-view" id="file-tree"></div>
+                    </aside>
+                    <div class="editor-container">
+                        <div class="code-editor" id="editor-wrapper">
+                            <div id="highlight-overlay"></div>
+                            <pre id="highlighting" aria-hidden="true"><code id="highlighting-content"></code></pre>
+                            <textarea id="editing" spellcheck="false" placeholder="Paste your QA scenario JSON here..."></textarea>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <div class="pane-resizer" id="pane-resizer"></div>
+
+            <section class="pane checklist-pane">
+                <div class="pane-header">
+                    <h2>Checklist UI</h2>
+                    <div class="scenario-meta" id="scenario-title">No scenario loaded</div>
+                </div>
+                <div class="checklist-container">
+                    <div class="spreadsheet-view" id="checklist-view">
+                        <table id="checklist-table">
+                            <thead>
+                                <tr>
+                                    <th class="col-num">#</th>
+                                    <th class="col-given">Given</th>
+                                    <th class="col-when">When</th>
+                                    <th class="col-then">Then</th>
+                                    <th class="col-pass" id="col-pass-toggle" title="Toggle all pass">Pass</th>
+                                </tr>
+                            </thead>
+                            <tbody id="checklist-body">
+                                <!-- Steps will be rendered here -->
+                                <tr class="empty-state">
+                                    <td colspan="5">Please enter a valid JSON scenario to generate the checklist.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>

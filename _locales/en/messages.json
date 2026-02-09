@@ -6,5 +6,13 @@
   "open_popup_tooltip": {
     "message": "Opens the current tab in a new window without the address bar or bookmarks bar.",
     "description": "Tooltip for the menu item"
+  },
+  "open_qa_scenario_title": {
+    "message": "Open QA Scenario",
+    "description": "Menu item title"
+  },
+  "open_qa_scenario_tooltip": {
+    "message": "Opens a window to manage JSON-based QA scenarios and checklists.",
+    "description": "Tooltip for the QA scenario menu item"
   }
 }
