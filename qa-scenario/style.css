@@ -333,11 +333,39 @@ body.is-resizing .pane-resizer {
     flex-direction: column;
 }
 
+.file-tree-panel.is-collapsed {
+    flex: 0 0 56px;
+    width: 56px;
+    min-width: 56px;
+    max-width: 56px;
+}
+
+.file-tree-panel.is-collapsed .tree-toolbar-left,
+.file-tree-panel.is-collapsed .tree-view {
+    display: none;
+}
+
+.file-tree-panel.is-collapsed .tree-toolbar {
+    justify-content: center;
+}
+
+.file-tree-panel.is-collapsed #btn-tree-menu {
+    display: none;
+}
+
+.file-tree-panel.is-collapsed #btn-show-tree {
+    display: inline-flex;
+}
+
+.file-tree-panel.is-collapsed .tree-menu {
+    display: none;
+}
+
 .tree-toolbar {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
+    gap: 6px;
     padding: 8px;
     border-bottom: 1px solid var(--border-muted);
 }
@@ -346,6 +374,13 @@ body.is-resizing .pane-resizer {
     display: inline-flex;
     align-items: center;
     gap: 6px;
+}
+
+.tree-toolbar-right {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    position: relative;
 }
 
 .tree-btn {
@@ -360,6 +395,77 @@ body.is-resizing .pane-resizer {
     padding: 2px 8px;
     cursor: pointer;
     transition: background-color 120ms ease, border-color 120ms ease;
+    white-space: nowrap;
+}
+
+.tree-btn-ghost {
+    white-space: nowrap;
+}
+
+.tree-btn-more {
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    font-size: 12px;
+    line-height: 1;
+    text-align: center;
+    letter-spacing: 1px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.tree-btn-more::before {
+    content: '';
+}
+
+#btn-show-tree {
+    display: none;
+}
+
+.tree-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    min-width: 180px;
+    background: var(--pane-bg);
+    border: 1px solid var(--border-muted);
+    border-radius: 8px;
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.35);
+    padding: 6px;
+    display: none;
+    z-index: 20;
+}
+
+.tree-menu.is-open {
+    display: block;
+}
+
+.tree-menu-item {
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    border: 0;
+    color: var(--text-primary);
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.menu-label {
+    display: none;
+}
+
+.file-tree-panel[data-tree-visible="true"] .menu-label-hide,
+.file-tree-panel[data-tree-visible="false"] .menu-label-show,
+.file-tree-panel[data-folders-expanded="true"] .menu-label-collapse,
+.file-tree-panel[data-folders-expanded="false"] .menu-label-expand {
+    display: inline;
+}
+
+.tree-menu-item:hover {
+    background: rgba(56, 139, 253, 0.12);
 }
 
 .tree-btn:hover {

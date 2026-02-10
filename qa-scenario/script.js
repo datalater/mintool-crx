@@ -28,7 +28,12 @@ const EL = {
     btnNewFolder: document.getElementById('btn-new-folder'),
     btnNewFile: document.getElementById('btn-new-file'),
     btnToggleFolders: document.getElementById('btn-toggle-folders'),
+    btnToggleTree: document.getElementById('btn-toggle-tree'),
+    btnTreeMenu: document.getElementById('btn-tree-menu'),
+    btnShowTree: document.getElementById('btn-show-tree'),
+    treeMenu: document.getElementById('tree-menu'),
     fileTree: document.getElementById('file-tree'),
+    fileTreePanel: document.querySelector('.file-tree-panel'),
     appContent: document.querySelector('.app-content'),
     editorPane: document.getElementById('editor-pane'),
     btnImport: document.getElementById('btn-import'),
@@ -54,6 +59,8 @@ function init() {
     setupResizing();
     setupWindowListeners();
     applyLineNumberVisibility();
+    applyFileTreePreference();
+    setupTreeMenu();
 }
 
 function loadWorkspace() {
@@ -61,6 +68,7 @@ function loadWorkspace() {
     const stored = raw ? tryParseJson(raw) : null;
     workspace = Workspace.normalizeWorkspace(stored);
     applyLineNumberPreference();
+    applyFileTreePreference();
     loadActiveFile();
 }
 
@@ -114,7 +122,8 @@ function handleEditorPaste() {
 function handleEditorKeydown(event) {
     if (event.key !== 'Tab' && event.code !== 'Tab') return;
     event.preventDefault();
-    if (event.shiftKey) {
+    const isShift = event.shiftKey || event.getModifierState('Shift');
+    if (isShift) {
         unindentSelection();
     } else {
         indentSelection();
@@ -164,13 +173,11 @@ function splitLines(block) {
 
 function getUnindentDelta(line) {
     if (line.startsWith('  ')) return -2;
-    if (line.startsWith(' ')) return -1;
     return 0;
 }
 
 function removeLeadingIndent(line) {
     if (line.startsWith('  ')) return line.slice(2);
-    if (line.startsWith(' ')) return line.slice(1);
     return line;
 }
 
@@ -318,8 +325,9 @@ function updateFolderToggleButtonState() {
     const folders = Array.isArray(workspace.folders) ? workspace.folders : [];
     if (folders.length === 0) {
         EL.btnToggleFolders.disabled = true;
-        EL.btnToggleFolders.textContent = 'Expand';
-        EL.btnToggleFolders.title = 'No folders';
+        if (EL.fileTreePanel) {
+            EL.fileTreePanel.dataset.foldersExpanded = 'false';
+        }
         return;
     }
 
@@ -330,10 +338,9 @@ function updateFolderToggleButtonState() {
 
     const allExpanded = folders.every(folder => expandedSet.has(folder.id));
     EL.btnToggleFolders.disabled = false;
-    EL.btnToggleFolders.textContent = allExpanded ? 'Collapse' : 'Expand';
-    EL.btnToggleFolders.title = allExpanded
-        ? 'Collapse all folders (active file folder stays open)'
-        : 'Expand all folders';
+    if (EL.fileTreePanel) {
+        EL.fileTreePanel.dataset.foldersExpanded = allExpanded ? 'true' : 'false';
+    }
 }
 
 function toggleAllFolders() {
@@ -355,6 +362,42 @@ function toggleAllFolders() {
     }
 
     persist();
+}
+
+function setupTreeMenu() {
+    if (!EL.btnTreeMenu || !EL.treeMenu) return;
+    EL.btnTreeMenu.addEventListener('click', (event) => {
+        event.stopPropagation();
+        toggleTreeMenu();
+    });
+    document.addEventListener('click', handleTreeMenuOutsideClick);
+    document.addEventListener('keydown', handleTreeMenuEscape);
+}
+
+function toggleTreeMenu() {
+    setTreeMenuOpen(!EL.treeMenu.classList.contains('is-open'));
+}
+
+function setTreeMenuOpen(isOpen) {
+    if (!EL.treeMenu || !EL.btnTreeMenu) return;
+    EL.treeMenu.classList.toggle('is-open', isOpen);
+    EL.btnTreeMenu.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+}
+
+function closeTreeMenu() {
+    setTreeMenuOpen(false);
+}
+
+function handleTreeMenuOutsideClick(event) {
+    if (!EL.treeMenu || !EL.btnTreeMenu) return;
+    if (EL.treeMenu.contains(event.target)) return;
+    if (EL.btnTreeMenu.contains(event.target)) return;
+    setTreeMenuOpen(false);
+}
+
+function handleTreeMenuEscape(event) {
+    if (event.key !== 'Escape') return;
+    setTreeMenuOpen(false);
 }
 
 function renderChecklist() {
@@ -383,6 +426,13 @@ function renderChecklist() {
         }
     });
     UI.updatePassHeaderState(EL.passHeaderToggle, currentData);
+    clearHighlightIfNoSelection();
+}
+
+function clearHighlightIfNoSelection() {
+    if (!EL.checklistBody) return;
+    const hasSelection = Boolean(EL.checklistBody.querySelector('.selected-row'));
+    if (!hasSelection) clearStepHighlight();
 }
 
 function toggleAllPass() {
@@ -448,6 +498,24 @@ function persistLineNumberPreference(shouldShow) {
     Workspace.persistWorkspace(workspace);
 }
 
+function applyFileTreePreference() {
+    if (!workspace?.uiState || !EL.fileTreePanel) return;
+    const shouldShow = workspace.uiState.showFileTree !== false;
+    setFileTreeVisibility(shouldShow, { persist: false });
+}
+
+function setFileTreeVisibility(shouldShow, options = {}) {
+    if (!EL.fileTreePanel || !EL.btnToggleTree) return;
+    const persist = options.persist !== false;
+    EL.fileTreePanel.classList.toggle('is-collapsed', !shouldShow);
+    EL.fileTreePanel.dataset.treeVisible = shouldShow ? 'true' : 'false';
+    closeTreeMenu();
+    if (persist && workspace?.uiState) {
+        workspace.uiState.showFileTree = shouldShow;
+        Workspace.persistWorkspace(workspace);
+    }
+}
+
 function updateLineNumbers() {
     const lineCount = Math.max(1, EL.editing.value.split('\n').length);
     const lines = Array.from({ length: lineCount }, (_, i) => i + 1);
@@ -487,9 +555,9 @@ function updateStepHighlightPosition() {
     const block = EL.highlightOverlay.firstElementChild;
     if (!block) return;
 
-    const lineHeight = getEditorLineHeight();
-    const height = Math.max(1, stepHighlightRange.endLine - stepHighlightRange.startLine + 1) * lineHeight;
-    const top = (stepHighlightRange.startLine - 1) * lineHeight - EL.editing.scrollTop;
+    const metrics = getEditorMetrics();
+    const height = Math.max(1, stepHighlightRange.endLine - stepHighlightRange.startLine + 1) * metrics.lineHeight;
+    const top = metrics.paddingTop + (stepHighlightRange.startLine - 1) * metrics.lineHeight - EL.editing.scrollTop;
 
     block.style.top = `${top}px`;
     block.style.height = `${height}px`;
@@ -503,8 +571,9 @@ function getLineRange(text, start, end) {
 
 function scrollToLine(position) {
     const line = getLineColumn(EL.editing.value, position).line;
-    const lineHeight = getEditorLineHeight();
-    EL.editing.scrollTop = (line - 1) * lineHeight;
+    const metrics = getEditorMetrics();
+    const targetTop = metrics.paddingTop + (line - 1) * metrics.lineHeight;
+    EL.editing.scrollTop = Math.max(0, targetTop - (EL.editing.clientHeight / 3));
     updateStepHighlightPosition();
 }
 
@@ -589,9 +658,13 @@ function normalizeErrorPosition(text, position) {
     return Math.min(Math.max(position, 0), text.length - 1);
 }
 
-function getEditorLineHeight() {
-    const value = parseFloat(getComputedStyle(EL.editing).lineHeight);
-    return Number.isFinite(value) ? value : 20;
+function getEditorMetrics() {
+    const styles = getComputedStyle(EL.editing);
+    const fontSize = parseFloat(styles.fontSize) || 13;
+    let lineHeight = parseFloat(styles.lineHeight);
+    if (Number.isNaN(lineHeight)) lineHeight = fontSize * 1.5;
+    const paddingTop = parseFloat(styles.paddingTop) || 0;
+    return { lineHeight, paddingTop };
 }
 
 function setupResizing() {
@@ -705,7 +778,20 @@ function setupEventListeners() {
 
     EL.toggleLineNumbers.addEventListener('change', applyLineNumberVisibility);
 
-    EL.btnToggleFolders.addEventListener('click', toggleAllFolders);
+    EL.btnToggleFolders.addEventListener('click', () => {
+        toggleAllFolders();
+        closeTreeMenu();
+    });
+
+    EL.btnToggleTree.addEventListener('click', () => {
+        const isCollapsed = EL.fileTreePanel?.classList.contains('is-collapsed');
+        setFileTreeVisibility(Boolean(isCollapsed));
+        closeTreeMenu();
+    });
+
+    EL.btnShowTree.addEventListener('click', () => {
+        setFileTreeVisibility(true);
+    });
 
     EL.passHeaderToggle.addEventListener('click', () => {
         if (EL.passHeaderToggle.classList.contains('disabled')) return;
@@ -730,7 +816,13 @@ function setupEventListeners() {
             const nextName = Workspace.getNextAvailableFileName(workspace, fId, trimmedName);
             const f = Workspace.createFileRecord(fId, nextName);
             workspace.files.push(f);
+            workspace.uiState.activeFileId = f.id;
+            workspace.uiState.selectedFolderId = fId;
+            workspace.uiState.selectedFileId = f.id;
+            workspace.uiState.lastSelectionType = 'file';
+            lastTreeSelectionType = 'file';
             persist();
+            loadActiveFile();
         }
     });
 

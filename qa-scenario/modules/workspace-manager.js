@@ -13,11 +13,12 @@ export function createFolderRecord(name) {
 }
 
 export function createFileRecord(folderId, name, content = '') {
+    const safeName = ensureJsonFileName(name);
     return {
         id: 'file-' + nowTs() + '-' + Math.floor(Math.random() * 1000),
         folderId: folderId,
-        name: name,
-        content: content || buildDefaultScenarioContent(name),
+        name: safeName,
+        content: content || buildDefaultScenarioContent(safeName),
         createdAt: nowIso(),
         updatedAt: nowIso()
     };
@@ -62,13 +63,21 @@ export function getNextAvailableFolderName(workspace, baseName, excludeId = null
 }
 
 export function getNextAvailableFileName(workspace, folderId, baseName, excludeId = null) {
-    let name = baseName;
+    const normalizedBase = ensureJsonFileName(baseName);
+    let name = normalizedBase;
     let counter = 1;
     const filesInFolder = workspace.files.filter(f => f.folderId === folderId);
     while (filesInFolder.some(f => f.name === name && f.id !== excludeId)) {
-        name = buildIndexedFileName(baseName, counter++);
+        name = buildIndexedFileName(normalizedBase, counter++);
     }
     return name;
+}
+
+function ensureJsonFileName(name) {
+    const trimmed = (name || '').trim();
+    const fallback = DEFAULT_FILE_NAME || 'scenario';
+    const safe = trimmed || fallback;
+    return safe.toLowerCase().endsWith('.json') ? safe : `${safe}.json`;
 }
 
 function buildIndexedFileName(baseName, counter) {
@@ -87,6 +96,9 @@ export function normalizeWorkspace(workspace) {
     if (!workspace.uiState.expandedFolderIds) workspace.uiState.expandedFolderIds = [];
     if (typeof workspace.uiState.showLineNumbers !== 'boolean') {
         workspace.uiState.showLineNumbers = true;
+    }
+    if (typeof workspace.uiState.showFileTree !== 'boolean') {
+        workspace.uiState.showFileTree = true;
     }
     if (!workspace.uiState.selectedFileId) workspace.uiState.selectedFileId = null;
     if (!workspace.uiState.lastSelectionType) workspace.uiState.lastSelectionType = 'file';
@@ -174,7 +186,8 @@ export function buildWorkspaceExportPayload(workspace) {
             selectedFolderId: workspace?.uiState?.selectedFolderId || null,
             selectedFileId: workspace?.uiState?.selectedFileId || null,
             lastSelectionType: workspace?.uiState?.lastSelectionType || null,
-            showLineNumbers: workspace?.uiState?.showLineNumbers ?? true
+            showLineNumbers: workspace?.uiState?.showLineNumbers ?? true,
+            showFileTree: workspace?.uiState?.showFileTree ?? true
         }
     };
 }

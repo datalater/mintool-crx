@@ -58,7 +58,20 @@
                                 <button id="btn-new-folder" class="tree-btn" type="button">New Folder</button>
                                 <button id="btn-new-file" class="tree-btn" type="button">New File</button>
                             </div>
-                            <button id="btn-toggle-folders" class="tree-btn tree-btn-ghost" type="button">Collapse</button>
+                            <div class="tree-toolbar-right">
+                                <button id="btn-show-tree" class="tree-btn tree-btn-ghost" type="button" title="Show File Tree" aria-label="Show File Tree">Show</button>
+                                <button id="btn-tree-menu" class="tree-btn tree-btn-ghost tree-btn-more" type="button" aria-haspopup="menu" aria-expanded="false" title="More">•••</button>
+                                <div id="tree-menu" class="tree-menu" role="menu" aria-label="File tree menu">
+                                    <button id="btn-toggle-tree" class="tree-menu-item" type="button" role="menuitem">
+                                        <span class="menu-label menu-label-hide">Hide File Tree</span>
+                                        <span class="menu-label menu-label-show">Show File Tree</span>
+                                    </button>
+                                    <button id="btn-toggle-folders" class="tree-menu-item" type="button" role="menuitem">
+                                        <span class="menu-label menu-label-collapse">Collapse Folders</span>
+                                        <span class="menu-label menu-label-expand">Expand Folders</span>
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                         <div class="tree-view" id="file-tree"></div>
                     </aside>

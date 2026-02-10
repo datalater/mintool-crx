@@ -214,8 +214,7 @@ export function renderChecklist(container, data, options = {}) {
         const thenVal = Array.isArray(step.then) ? step.then.join('\n') : (step.then || '');
         populateCell('then', thenVal.trim());
 
-        tr.addEventListener('click', (e) => {
-            if (e.target.closest('.cell-content') || e.target.closest('.col-pass')) return;
+        tr.addEventListener('click', () => {
             const rows = container.querySelectorAll('tr');
             rows.forEach(r => r.classList.remove('selected-row'));
             tr.classList.add('selected-row');

@@ -44,29 +44,9 @@ export function syntaxHighlight(json, errorPos = -1) {
  * Finds the line range ([startLine, endLine]) for the Nth step in the "steps" array.
  */
 export function findStepBounds(json, targetIndex) {
-    let stepsArrayStartIdx = -1;
-    let inString = false;
-    
-    for (let i = 0; i < json.length; i++) {
-        const char = json[i];
-        if (char === '"' && json[i-1] !== '\\') {
-            inString = !inString;
-            continue;
-        }
-        
-        if (!inString) {
-            if (char === 's' && json.substr(i, 7) === 'steps":') {
-                 let j = i + 7;
-                 while (j < json.length) {
-                     if (json[j] === '[') {
-                         stepsArrayStartIdx = j;
-                         break;
-                     }
-                     j++;
-                 }
-                 if (stepsArrayStartIdx !== -1) break;
-            }
-        }
+    let stepsArrayStartIdx = json.indexOf('"steps":');
+    if (stepsArrayStartIdx !== -1) {
+        stepsArrayStartIdx = json.indexOf('[', stepsArrayStartIdx);
     }
     
     if (stepsArrayStartIdx === -1) return null;
@@ -74,8 +54,7 @@ export function findStepBounds(json, targetIndex) {
     let currentStepIdx = -1;
     let braceDepth = 0;
     let stepStartIndex = -1;
-    
-    inString = false;
+    let inString = false;
     for (let i = stepsArrayStartIdx + 1; i < json.length; i++) {
         const char = json[i];
         if (char === '"' && json[i-1] !== '\\') {
