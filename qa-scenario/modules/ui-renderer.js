@@ -30,6 +30,17 @@ export function formatChecklistCellContent(rawValue) {
     return escaped.replace(/`([^`\n]+)`/g, '<code class="inline-code">$1</code>');
 }
 
+function normalizeStepFieldForEditor(value) {
+    if (Array.isArray(value)) {
+        return value
+            .map(item => (item == null ? '' : String(item).trim()))
+            .filter(Boolean)
+            .join('\n');
+    }
+    if (value == null) return '';
+    return String(value).trim();
+}
+
 export function updatePassHeaderState(passHeaderToggle, currentData) {
     if (!passHeaderToggle) return;
 
@@ -93,6 +104,7 @@ export function renderFileTree(container, workspace, options = {}) {
         const name = document.createElement('span');
         name.className = 'tree-name';
         name.textContent = folder.name;
+        name.title = folder.name;
 
         const folderActions = createTreeRowActions([
             { label: 'Edit', onClick: () => onRenameFolder(folder.id) },
@@ -135,7 +147,9 @@ export function renderFileTree(container, workspace, options = {}) {
 
                     const fileName = document.createElement('span');
                     fileName.className = 'tree-name';
-                    fileName.textContent = `${file.name}${isActive && activeFileDirty ? ' *' : ''}`;
+                    const visibleFileName = `${file.name}${isActive && activeFileDirty ? ' *' : ''}`;
+                    fileName.textContent = visibleFileName;
+                    fileName.title = visibleFileName;
 
                     const fileActions = createTreeRowActions([
                         { label: 'Edit', onClick: () => onRenameFile(file.id) },
@@ -209,10 +223,9 @@ export function renderChecklist(container, data, options = {}) {
             });
         };
 
-        populateCell('given', (step.given || '').trim());
-        populateCell('when', (step.when || '').trim());
-        const thenVal = Array.isArray(step.then) ? step.then.join('\n') : (step.then || '');
-        populateCell('then', thenVal.trim());
+        populateCell('given', normalizeStepFieldForEditor(step.given));
+        populateCell('when', normalizeStepFieldForEditor(step.when));
+        populateCell('then', normalizeStepFieldForEditor(step.then));
 
         tr.addEventListener('click', () => {
             const rows = container.querySelectorAll('tr');

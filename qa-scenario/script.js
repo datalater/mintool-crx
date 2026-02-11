@@ -15,6 +15,7 @@ const EL = {
     highlightOverlay: document.getElementById('highlight-overlay'),
     jsonStatus: document.getElementById('json-status'),
     jsonErrorPosition: document.getElementById('json-error-position'),
+    jsonErrorMessage: document.getElementById('json-error-message'),
     lineNumbers: document.getElementById('line-numbers'),
     toggleLineNumbers: document.getElementById('toggle-line-numbers'),
     editorWrapper: document.getElementById('editor-wrapper'),
@@ -96,17 +97,26 @@ function validateAndRender() {
     const text = EL.editing.value;
     updateHighlighting();
 
+    let parsed;
     try {
-        currentData = JSON.parse(text);
-        EL.jsonStatus.textContent = "Valid";
-        EL.jsonStatus.classList.remove('error');
-        updateErrorPosition(-1);
-        renderChecklist();
+        parsed = JSON.parse(text);
     } catch (e) {
         currentData = null;
-        EL.jsonStatus.textContent = "Invalid";
-        EL.jsonStatus.classList.add('error');
-        parseErrorPosition(e.message);
+        setJsonValidationErrorState('Invalid JSON');
+        updateErrorMessage(formatParseErrorMessage(e));
+        parseErrorPosition(getSafeErrorMessage(e));
+        return;
+    }
+
+    currentData = parsed;
+    try {
+        renderChecklist();
+        setJsonValidationValidState();
+    } catch (e) {
+        setJsonValidationErrorState('Runtime Error');
+        updateErrorPosition(-1);
+        updateErrorMessage(formatRuntimeErrorMessage(e));
+        console.error('[qa-scenario] checklist render failed', e);
     }
 }
 
@@ -407,8 +417,8 @@ function renderChecklist() {
             syncToEditor();
         },
         onUpdateStep: (idx, field, val) => {
-            if (field === 'then' && val.includes('\n')) {
-                currentData.steps[idx].then = val.split('\n').filter(l => l.trim());
+            if (isStepArrayField(field)) {
+                currentData.steps[idx][field] = toChecklistArray(val);
             } else {
                 currentData.steps[idx][field] = val;
             }
@@ -422,11 +432,29 @@ function renderChecklist() {
         },
         onScenarioTitleUpdate: (title, isPrimary) => {
             EL.scenarioTitle.textContent = title;
+            EL.scenarioTitle.title = title;
             EL.scenarioTitle.classList.toggle('is-primary', isPrimary);
         }
     });
     UI.updatePassHeaderState(EL.passHeaderToggle, currentData);
     clearHighlightIfNoSelection();
+}
+
+function isStepArrayField(field) {
+    return field === 'given' || field === 'when' || field === 'then';
+}
+
+function toChecklistArray(value) {
+    if (Array.isArray(value)) {
+        return value
+            .map(item => (item == null ? '' : String(item).trim()))
+            .filter(Boolean);
+    }
+    if (value == null) return [];
+    return String(value)
+        .split('\n')
+        .map(line => line.trim())
+        .filter(Boolean);
 }
 
 function clearHighlightIfNoSelection() {
@@ -525,10 +553,44 @@ function updateLineNumbers() {
 function renderEditorFromCurrentData() {
     updateLineNumbers();
     updateHighlighting();
+    setJsonValidationValidState();
+    UI.updatePassHeaderState(EL.passHeaderToggle, currentData);
+}
+
+function setJsonValidationValidState() {
     EL.jsonStatus.textContent = "Valid";
     EL.jsonStatus.classList.remove('error');
     updateErrorPosition(-1);
-    UI.updatePassHeaderState(EL.passHeaderToggle, currentData);
+    updateErrorMessage('');
+}
+
+function setJsonValidationErrorState(label) {
+    EL.jsonStatus.textContent = label;
+    EL.jsonStatus.classList.add('error');
+}
+
+function updateErrorMessage(message) {
+    if (!EL.jsonErrorMessage) return;
+    const normalized = String(message || '').trim();
+    EL.jsonErrorMessage.textContent = normalized;
+    EL.jsonErrorMessage.title = normalized;
+    EL.jsonErrorMessage.classList.toggle('is-hidden', !normalized);
+}
+
+function formatParseErrorMessage(error) {
+    return `JSON parse error: ${getSafeErrorMessage(error)}`;
+}
+
+function formatRuntimeErrorMessage(error) {
+    const name = error && error.name ? error.name : 'Error';
+    return `Render error (${name}): ${getSafeErrorMessage(error)}`;
+}
+
+function getSafeErrorMessage(error) {
+    if (error && typeof error.message === 'string' && error.message.trim()) {
+        return error.message.trim();
+    }
+    return String(error || 'Unknown error').trim();
 }
 
 function hasSteps(data) {
