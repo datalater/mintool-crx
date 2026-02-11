@@ -37,7 +37,7 @@
                     <h2>JSON Editor</h2>
                     <div class="editor-header-controls">
                         <div id="save-indicator" class="save-indicator is-saved" role="status" aria-live="polite">
-                            <span id="save-indicator-time" class="save-indicator-time">--:--:--</span>
+                            <span id="save-indicator-time" class="save-indicator-time">---- -- -- --:--:--</span>
                             <span class="save-indicator-dot" aria-hidden="true"></span>
                             <span id="save-indicator-label">Saved</span>
                         </div>
@@ -45,7 +45,7 @@
                             <input type="checkbox" id="toggle-line-numbers" checked>
                             <span>Line numbers</span>
                         </label>
-                        <button id="btn-format" class="btn btn-primary btn-editor-action">
+                        <button id="btn-format" class="btn btn-primary btn-editor-action" title="Format (Cmd+S / Ctrl+S in JSON editor)">
                             <span class="btn-icon">✨</span> Format
                         </button>
                         <div class="status-badge" id="json-status">Valid</div>

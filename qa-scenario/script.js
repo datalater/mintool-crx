@@ -138,6 +138,12 @@ function handleEditorPaste() {
 }
 
 function handleEditorKeydown(event) {
+    if (isEditorSaveShortcut(event)) {
+        event.preventDefault();
+        runFormatAndSave();
+        return;
+    }
+
     if (event.key !== 'Tab' && event.code !== 'Tab') return;
     event.preventDefault();
     const isShift = event.shiftKey || event.getModifierState('Shift');
@@ -147,6 +153,23 @@ function handleEditorKeydown(event) {
         indentSelection();
     }
     handleEditorInput();
+}
+
+function isEditorSaveShortcut(event) {
+    if (!event || event.isComposing) return false;
+    const hasPrimaryModifier = event.metaKey || event.ctrlKey;
+    const isSaveKey = event.key === 's' || event.key === 'S' || event.code === 'KeyS';
+    return hasPrimaryModifier && isSaveKey && !event.shiftKey && !event.altKey;
+}
+
+function runFormatAndSave() {
+    try {
+        EL.editing.value = JSON.stringify(JSON.parse(EL.editing.value), null, 2);
+        handleEditorInput();
+        flushAutosaveAndPersist();
+    } catch (e) {
+        alert("Invalid JSON");
+    }
 }
 
 function indentSelection() {
@@ -497,6 +520,14 @@ function scheduleSave() {
     autosaveTimer = setTimeout(persist, AUTOSAVE_DELAY_MS || 800);
 }
 
+function flushAutosaveAndPersist() {
+    if (autosaveTimer) {
+        clearTimeout(autosaveTimer);
+        autosaveTimer = null;
+    }
+    persist();
+}
+
 function applyImportedWorkspace(data) {
     workspace = Workspace.normalizeWorkspace(data);
     persist();
@@ -528,11 +559,14 @@ function updateLastSavedTime(value) {
 
 function formatSavedTime(value) {
     const date = value ? new Date(value) : new Date();
-    if (Number.isNaN(date.getTime())) return '--:--:--';
+    if (Number.isNaN(date.getTime())) return '---- -- -- --:--:--';
+    const yyyy = String(date.getFullYear());
+    const mon = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
     const hh = String(date.getHours()).padStart(2, '0');
     const mm = String(date.getMinutes()).padStart(2, '0');
     const ss = String(date.getSeconds()).padStart(2, '0');
-    return `${hh}:${mm}:${ss}`;
+    return `${yyyy}-${mon}-${dd} ${hh}:${mm}:${ss}`;
 }
 
 function applyLineNumberVisibility() {
@@ -970,12 +1004,7 @@ function setupEventListeners() {
         }
     });
     
-    EL.btnFormat.addEventListener('click', () => {
-        try {
-            EL.editing.value = JSON.stringify(JSON.parse(EL.editing.value), null, 2);
-            handleEditorInput();
-        } catch (e) { alert("Invalid JSON"); }
-    });
+    EL.btnFormat.addEventListener('click', runFormatAndSave);
 
     EL.toggleLineNumbers.addEventListener('change', applyLineNumberVisibility);
 
