@@ -115,13 +115,24 @@ body.is-resizing .file-tree-resizer {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding-right: 12px;
-    border-right: 1px solid var(--border-muted);
-    font-size: 12px;
+    padding: 2px 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    background-color: var(--accent-secondary);
+    font-size: 11px;
     line-height: 1;
     color: var(--text-secondary);
     user-select: none;
     white-space: nowrap;
+}
+
+.save-indicator-time {
+    font-family: var(--font-code);
+    color: var(--text-primary);
+}
+
+.save-indicator-time:empty {
+    display: none;
 }
 
 .save-indicator-dot {

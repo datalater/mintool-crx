@@ -14,10 +14,6 @@
                 <h1>QA Scenario Checker</h1>
             </div>
             <div class="header-controls">
-                <div id="save-indicator" class="save-indicator is-saved" role="status" aria-live="polite">
-                    <span class="save-indicator-dot" aria-hidden="true"></span>
-                    <span id="save-indicator-label">Saved</span>
-                </div>
                 <div class="actions">
                     <button id="btn-import" class="btn btn-secondary">
                         <span class="btn-icon">📥</span> Import
@@ -40,6 +36,11 @@
                 <div class="pane-header">
                     <h2>JSON Editor</h2>
                     <div class="editor-header-controls">
+                        <div id="save-indicator" class="save-indicator is-saved" role="status" aria-live="polite">
+                            <span id="save-indicator-time" class="save-indicator-time">--:--:--</span>
+                            <span class="save-indicator-dot" aria-hidden="true"></span>
+                            <span id="save-indicator-label">Saved</span>
+                        </div>
                         <label class="line-numbers-toggle">
                             <input type="checkbox" id="toggle-line-numbers" checked>
                             <span>Line numbers</span>

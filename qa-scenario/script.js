@@ -22,6 +22,7 @@ const EL = {
     scenarioTitle: document.getElementById('scenario-title'),
     btnFormat: document.getElementById('btn-format'),
     saveIndicator: document.getElementById('save-indicator'),
+    saveIndicatorTime: document.getElementById('save-indicator-time'),
     saveIndicatorLabel: document.getElementById('save-indicator-label'),
     btnFoldEditor: document.getElementById('btn-fold-editor'),
     paneResizer: document.getElementById('pane-resizer'),
@@ -512,7 +513,26 @@ async function handleImportFile(file) {
 function updateSaveIndicator(state) {
     EL.saveIndicator.classList.remove('is-dirty', 'is-saving', 'is-saved');
     EL.saveIndicator.classList.add(`is-${state}`);
+    if (state === 'saved') {
+        updateLastSavedTime(workspace?.updatedAt);
+    } else if (state === 'dirty' && EL.saveIndicatorTime) {
+        EL.saveIndicatorTime.textContent = '';
+    }
     EL.saveIndicatorLabel.textContent = state === 'dirty' ? 'Unsaved' : (state === 'saving' ? 'Saving...' : 'Saved');
+}
+
+function updateLastSavedTime(value) {
+    if (!EL.saveIndicatorTime) return;
+    EL.saveIndicatorTime.textContent = formatSavedTime(value);
+}
+
+function formatSavedTime(value) {
+    const date = value ? new Date(value) : new Date();
+    if (Number.isNaN(date.getTime())) return '--:--:--';
+    const hh = String(date.getHours()).padStart(2, '0');
+    const mm = String(date.getMinutes()).padStart(2, '0');
+    const ss = String(date.getSeconds()).padStart(2, '0');
+    return `${hh}:${mm}:${ss}`;
 }
 
 function applyLineNumberVisibility() {
