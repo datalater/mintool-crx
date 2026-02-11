@@ -16,7 +16,8 @@ body.is-resizing {
 }
 
 body.is-resizing .pane,
-body.is-resizing .pane-resizer {
+body.is-resizing .pane-resizer,
+body.is-resizing .file-tree-resizer {
     transition: none !important;
 }
 
@@ -339,9 +340,8 @@ body.is-resizing .pane-resizer {
 .file-tree-panel {
     flex: 0 0 260px;
     width: 260px;
-    min-width: 220px;
-    max-width: 320px;
-    border-right: 1px solid var(--border-muted);
+    min-width: 0;
+    max-width: none;
     background-color: var(--editor-bg);
     display: flex;
     flex-direction: column;
@@ -352,6 +352,7 @@ body.is-resizing .pane-resizer {
     width: 56px;
     min-width: 56px;
     max-width: 56px;
+    border-right: 1px solid var(--border-muted);
 }
 
 .file-tree-panel.is-collapsed .tree-toolbar-left,
@@ -372,6 +373,37 @@ body.is-resizing .pane-resizer {
 }
 
 .file-tree-panel.is-collapsed .tree-menu {
+    display: none;
+}
+
+.file-tree-resizer {
+    flex: 0 0 var(--tree-resizer-width);
+    width: var(--tree-resizer-width);
+    touch-action: none;
+    cursor: col-resize;
+    position: relative;
+    background: transparent;
+}
+
+.file-tree-resizer::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: 1px;
+    background-color: var(--border-muted);
+    transform: translateX(-50%);
+    transition: background-color 120ms ease, width 120ms ease;
+}
+
+.file-tree-resizer:hover::before,
+.file-tree-resizer.resizing::before {
+    width: 2px;
+    background-color: var(--accent-primary);
+}
+
+.file-tree-panel.is-collapsed + .file-tree-resizer {
     display: none;
 }
 

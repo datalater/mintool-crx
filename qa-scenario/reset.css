@@ -26,6 +26,7 @@
     --editor-padding: 16px;
     --line-number-gutter: 52px;
     --pane-resizer-width: 6px;
+    --tree-resizer-width: 8px;
     --editor-font-size: 13px;
     --editor-line-height: 1.5;
     --pane-header-height: 44px;

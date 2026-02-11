@@ -104,6 +104,9 @@ export function normalizeWorkspace(workspace) {
     if (typeof workspace.uiState.showFileTree !== 'boolean') {
         workspace.uiState.showFileTree = true;
     }
+    if (!Number.isFinite(workspace.uiState.fileTreeWidth) || workspace.uiState.fileTreeWidth <= 0) {
+        workspace.uiState.fileTreeWidth = null;
+    }
     if (!workspace.uiState.selectedFileId) workspace.uiState.selectedFileId = null;
     if (!workspace.uiState.lastSelectionType) workspace.uiState.lastSelectionType = 'file';
 
@@ -191,7 +194,8 @@ export function buildWorkspaceExportPayload(workspace) {
             selectedFileId: workspace?.uiState?.selectedFileId || null,
             lastSelectionType: workspace?.uiState?.lastSelectionType || null,
             showLineNumbers: workspace?.uiState?.showLineNumbers ?? true,
-            showFileTree: workspace?.uiState?.showFileTree ?? true
+            showFileTree: workspace?.uiState?.showFileTree ?? true,
+            fileTreeWidth: Number.isFinite(workspace?.uiState?.fileTreeWidth) ? workspace.uiState.fileTreeWidth : null
         }
     };
 }
