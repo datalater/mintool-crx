@@ -13,6 +13,7 @@ import { toWorkspaceFromImportedPayload as convertImportedPayloadToWorkspace } f
 import { createTreeMenuManager } from './modules/tree-menu-manager.js';
 import { getLineColumn, getPositionFromLineColumn, findTrailingCommaPosition, normalizeErrorPosition } from './modules/text-position-utils.js';
 import { createEditorSelectionManager } from './modules/editor-selection-manager.js';
+import { resolveParseErrorPosition, formatParseErrorMessage, formatRuntimeErrorMessage, getSafeErrorMessage } from './modules/json-error-manager.js';
 
 // --- Global State Mirroring the original ---
 const EL = {
@@ -295,33 +296,17 @@ function syncScroll() {
 }
 
 function parseErrorPosition(msg) {
-    const byPosition = getPositionFromMessage(msg);
-    if (byPosition !== null) return applyErrorPosition(byPosition);
-
-    const byLineColumn = getLineColumnFromMessage(msg);
-    if (byLineColumn) return applyErrorPosition(getPositionFromLineColumn(EL.editing.value, byLineColumn));
-
-    if (isUnexpectedEndError(msg)) return applyErrorPosition(EL.editing.value.length - 1);
-
-    const trailingComma = findTrailingCommaPosition(EL.editing.value);
-    if (trailingComma >= 0) return applyErrorPosition(trailingComma);
-
-    updateErrorPosition(-1);
-}
-
-function getPositionFromMessage(msg) {
-    const match = msg.match(/at position (\d+)/i);
-    return match ? parseInt(match[1], 10) : null;
-}
-
-function getLineColumnFromMessage(msg) {
-    const match = msg.match(/line\s+(\d+)\s+column\s+(\d+)/i);
-    if (!match) return null;
-    return { line: parseInt(match[1], 10), column: parseInt(match[2], 10) };
-}
-
-function isUnexpectedEndError(msg) {
-    return msg.includes('Unexpected end of JSON input');
+    const position = resolveParseErrorPosition(
+        msg,
+        EL.editing.value,
+        getPositionFromLineColumn,
+        findTrailingCommaPosition
+    );
+    if (position === null) {
+        updateErrorPosition(-1);
+        return;
+    }
+    applyErrorPosition(position);
 }
 
 function applyErrorPosition(position) {
@@ -736,22 +721,6 @@ function updateErrorMessage(message) {
     EL.jsonErrorMessage.textContent = normalized;
     EL.jsonErrorMessage.title = normalized;
     EL.jsonErrorMessage.classList.toggle('is-hidden', !normalized);
-}
-
-function formatParseErrorMessage(error) {
-    return `JSON parse error: ${getSafeErrorMessage(error)}`;
-}
-
-function formatRuntimeErrorMessage(error) {
-    const name = error && error.name ? error.name : 'Error';
-    return `Render error (${name}): ${getSafeErrorMessage(error)}`;
-}
-
-function getSafeErrorMessage(error) {
-    if (error && typeof error.message === 'string' && error.message.trim()) {
-        return error.message.trim();
-    }
-    return String(error || 'Unknown error').trim();
 }
 
 function hasSteps(data) {
