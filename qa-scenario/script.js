@@ -23,6 +23,7 @@ import {
     setJsonValidationErrorView,
     updateJsonErrorMessageView
 } from './modules/editor-view-state-manager.js';
+import { setupMainEventListeners } from './modules/event-listener-manager.js';
 
 // --- Global State Mirroring the original ---
 const EL = {
@@ -793,104 +794,89 @@ function handleBeforeUnload() {
 }
 
 function setupEventListeners() {
-    EL.editing.addEventListener('input', handleEditorInput);
-    EL.editing.addEventListener('paste', handleEditorPaste);
-    EL.editing.addEventListener('scroll', syncScroll);
-    EL.editing.addEventListener('keydown', handleEditorKeydown);
-
-    EL.btnFoldEditor.addEventListener('click', () => {
-        const willFold = !EL.appContent.classList.contains('folded');
-        if (willFold) {
-            resizerLayout.stopPaneResizing();
-            resizerLayout.stopFileTreeResizing();
-            EL.appContent.classList.add('folded');
-            EL.editorPane.style.flex = '0 0 0px';
-            EL.editorPane.style.width = '0px';
-            return;
-        }
-
-        EL.appContent.classList.remove('folded');
-        EL.editorPane.style.width = '';
-        const manualEditorWidth = resizerLayout.getManualEditorWidth();
-        const manualFileTreeWidth = resizerLayout.getManualFileTreeWidth();
-        if (Number.isFinite(manualEditorWidth)) {
-            resizerLayout.applyEditorWidth(manualEditorWidth, { persist: false });
-            if (Number.isFinite(manualFileTreeWidth) && isFileTreeVisible()) {
-                resizerLayout.applyFileTreeWidth(manualFileTreeWidth, { persist: false });
+    setupMainEventListeners({
+        el: EL,
+        onEditorInput: handleEditorInput,
+        onEditorPaste: handleEditorPaste,
+        onEditorScroll: syncScroll,
+        onEditorKeydown: handleEditorKeydown,
+        onFoldEditor: () => {
+            const willFold = !EL.appContent.classList.contains('folded');
+            if (willFold) {
+                resizerLayout.stopPaneResizing();
+                resizerLayout.stopFileTreeResizing();
+                EL.appContent.classList.add('folded');
+                EL.editorPane.style.flex = '0 0 0px';
+                EL.editorPane.style.width = '0px';
+                return;
             }
-            return;
-        }
-        EL.editorPane.style.flex = '';
-        if (isFileTreeVisible()) {
-            resizerLayout.applyFileTreeWidth(manualFileTreeWidth ?? DEFAULT_FILE_TREE_WIDTH, { persist: false });
-        }
-    });
-    
-    EL.btnFormat.addEventListener('click', runFormatAndSave);
 
-    EL.toggleLineNumbers.addEventListener('change', applyLineNumberVisibility);
+            EL.appContent.classList.remove('folded');
+            EL.editorPane.style.width = '';
+            const manualEditorWidth = resizerLayout.getManualEditorWidth();
+            const manualFileTreeWidth = resizerLayout.getManualFileTreeWidth();
+            if (Number.isFinite(manualEditorWidth)) {
+                resizerLayout.applyEditorWidth(manualEditorWidth, { persist: false });
+                if (Number.isFinite(manualFileTreeWidth) && isFileTreeVisible()) {
+                    resizerLayout.applyFileTreeWidth(manualFileTreeWidth, { persist: false });
+                }
+                return;
+            }
 
-    EL.btnToggleFolders.addEventListener('click', () => {
-        toggleAllFolders();
-        closeTreeMenu();
-    });
-
-    EL.btnToggleTree.addEventListener('click', () => {
-        const isCollapsed = EL.fileTreePanel?.classList.contains('is-collapsed');
-        setFileTreeVisibility(Boolean(isCollapsed));
-        closeTreeMenu();
-    });
-
-    EL.btnShowTree.addEventListener('click', () => {
-        setFileTreeVisibility(true);
-    });
-
-    EL.passHeaderToggle.addEventListener('click', () => {
-        if (EL.passHeaderToggle.classList.contains('disabled')) return;
-        toggleAllPass();
-    });
-
-    EL.btnNewFolder.addEventListener('click', () => {
-        const n = window.prompt('Folder name', 'new-folder');
-        if (n) {
-            const f = Workspace.createFolderRecord(n);
-            workspace.folders.push(f);
+            EL.editorPane.style.flex = '';
+            if (isFileTreeVisible()) {
+                resizerLayout.applyFileTreeWidth(manualFileTreeWidth ?? DEFAULT_FILE_TREE_WIDTH, { persist: false });
+            }
+        },
+        onFormat: runFormatAndSave,
+        onToggleLineNumbers: applyLineNumberVisibility,
+        onToggleFolders: () => {
+            toggleAllFolders();
+            closeTreeMenu();
+        },
+        onToggleTree: () => {
+            const isCollapsed = EL.fileTreePanel?.classList.contains('is-collapsed');
+            setFileTreeVisibility(Boolean(isCollapsed));
+            closeTreeMenu();
+        },
+        onShowTree: () => {
+            setFileTreeVisibility(true);
+        },
+        onTogglePassHeader: () => {
+            if (EL.passHeaderToggle.classList.contains('disabled')) return;
+            toggleAllPass();
+        },
+        onNewFolder: () => {
+            const name = window.prompt('Folder name', 'new-folder');
+            if (!name) return;
+            const folder = Workspace.createFolderRecord(name);
+            workspace.folders.push(folder);
             persist();
-        }
-    });
-
-    EL.btnNewFile.addEventListener('click', () => {
-        const fId = workspace.uiState.selectedFolderId || workspace.folders[0].id;
-        const defaultName = Workspace.getNextAvailableFileName(workspace, fId, 'scenario.json');
-        const n = window.prompt('File name', defaultName);
-        const trimmedName = n ? n.trim() : '';
-        if (trimmedName) {
-            const nextName = Workspace.getNextAvailableFileName(workspace, fId, trimmedName);
-            const f = Workspace.createFileRecord(fId, nextName);
-            workspace.files.push(f);
-            workspace.uiState.activeFileId = f.id;
-            workspace.uiState.selectedFolderId = fId;
-            workspace.uiState.selectedFileId = f.id;
+        },
+        onNewFile: () => {
+            const folderId = workspace.uiState.selectedFolderId || workspace.folders[0].id;
+            const defaultName = Workspace.getNextAvailableFileName(workspace, folderId, 'scenario.json');
+            const name = window.prompt('File name', defaultName);
+            const trimmedName = name ? name.trim() : '';
+            if (!trimmedName) return;
+            const nextName = Workspace.getNextAvailableFileName(workspace, folderId, trimmedName);
+            const file = Workspace.createFileRecord(folderId, nextName);
+            workspace.files.push(file);
+            workspace.uiState.activeFileId = file.id;
+            workspace.uiState.selectedFolderId = folderId;
+            workspace.uiState.selectedFileId = file.id;
             workspace.uiState.lastSelectionType = 'file';
             lastTreeSelectionType = 'file';
             persist();
             loadActiveFile();
-        }
-    });
-
-    EL.btnExport.addEventListener('click', handleExportClick);
-
-    EL.btnImport.addEventListener('click', () => {
-        EL.fileInput.value = '';
-        EL.fileInput.click();
-    });
-
-    EL.fileInput.addEventListener('change', async (event) => {
-        const file = event.target.files && event.target.files[0];
-        if (!file) return;
-        try {
-            await handleImportFile(file);
-        } catch (error) {
+        },
+        onExport: handleExportClick,
+        onImportClick: () => {
+            EL.fileInput.value = '';
+            EL.fileInput.click();
+        },
+        onImportFile: handleImportFile,
+        onImportError: () => {
             alert('Import failed');
         }
     });
