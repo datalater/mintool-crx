@@ -9,6 +9,7 @@ import { captureEditorSelectionSnapshot, restoreEditorSelectionSnapshot } from '
 import { createResizerLayoutManager } from './modules/resizer-layout-manager.js';
 import { buildExportPayload, buildRequiredScenarioWithDefaults, formatExportFilenameDate } from './modules/export-data-manager.js';
 import { createExportMenuManager } from './modules/export-menu-manager.js';
+import { toWorkspaceFromImportedPayload as convertImportedPayloadToWorkspace } from './modules/import-workspace-converter.js';
 
 // --- Global State Mirroring the original ---
 const EL = {
@@ -671,105 +672,17 @@ async function handleImportFile(file) {
     const text = await file.text();
     const parsed = tryParseJson(text);
     if (!parsed) return alert('Invalid JSON');
-    const importedWorkspace = toWorkspaceFromImportedPayload(parsed);
+    const importedWorkspace = convertImportedPayloadToWorkspace(parsed, {
+        exportFormat: EXPORT_FORMAT,
+        workspaceVersion: WORKSPACE_VERSION,
+        defaultFileName: DEFAULT_FILE_NAME,
+        createFolderRecord: Workspace.createFolderRecord,
+        createFileRecord: Workspace.createFileRecord,
+        normalizeExportMode,
+        buildRequiredScenarioWithDefaults
+    });
     if (!importedWorkspace) return alert('Unsupported import format');
     applyImportedWorkspace(importedWorkspace);
-}
-
-function toWorkspaceFromImportedPayload(payload) {
-    if (isExportPackagePayload(payload)) {
-        return buildWorkspaceFromExportPackage(payload);
-    }
-    if (isWorkspacePayload(payload)) {
-        return payload;
-    }
-    if (isScenarioPayload(payload)) {
-        return buildWorkspaceFromSingleScenario(payload);
-    }
-    return null;
-}
-
-function isWorkspacePayload(payload) {
-    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false;
-    return Array.isArray(payload.files)
-        || Array.isArray(payload.rules)
-        || Array.isArray(payload.folders)
-        || Boolean(payload.uiState);
-}
-
-function isScenarioPayload(payload) {
-    return Boolean(payload && typeof payload === 'object' && !Array.isArray(payload) && Array.isArray(payload.steps));
-}
-
-function isExportPackagePayload(payload) {
-    return Boolean(payload
-        && typeof payload === 'object'
-        && payload.format === EXPORT_FORMAT
-        && Array.isArray(payload.files));
-}
-
-function buildWorkspaceFromSingleScenario(scenarioData) {
-    const folder = Workspace.createFolderRecord('Imported');
-    const file = Workspace.createFileRecord(folder.id, `${DEFAULT_FILE_NAME || 'scenario'}.json`, JSON.stringify(scenarioData, null, 2));
-    return {
-        version: WORKSPACE_VERSION,
-        folders: [folder],
-        files: [file],
-        uiState: {}
-    };
-}
-
-function buildWorkspaceFromExportPackage(payload) {
-    const folderByName = new Map();
-    const folders = [];
-    const files = [];
-    const entries = Array.isArray(payload.files) ? payload.files : [];
-
-    const getFolderId = (name) => {
-        const normalized = normalizeFolderName(name);
-        if (folderByName.has(normalized)) return folderByName.get(normalized).id;
-        const folder = Workspace.createFolderRecord(normalized);
-        folderByName.set(normalized, folder);
-        folders.push(folder);
-        return folder.id;
-    };
-
-    entries.forEach((entry, index) => {
-        if (!entry || typeof entry !== 'object') return;
-        const folderId = getFolderId(entry.folder);
-        const nextName = normalizeImportedFileName(entry.name, index);
-        const content = normalizeImportedFileContent(entry);
-        files.push(Workspace.createFileRecord(folderId, nextName, content));
-    });
-
-    return {
-        version: WORKSPACE_VERSION,
-        folders,
-        files,
-        uiState: {
-            exportMode: normalizeExportMode(payload.exportMode),
-            customExportFields: Array.isArray(payload.customFields) ? payload.customFields : []
-        }
-    };
-}
-
-function normalizeFolderName(value) {
-    const name = typeof value === 'string' ? value.trim() : '';
-    return name || 'Imported';
-}
-
-function normalizeImportedFileName(value, index) {
-    const name = typeof value === 'string' ? value.trim() : '';
-    if (name) return name;
-    return `scenario-${index + 1}.json`;
-}
-
-function normalizeImportedFileContent(entry) {
-    if (typeof entry.rawContent === 'string') return entry.rawContent;
-    if (Object.prototype.hasOwnProperty.call(entry, 'data')) {
-        return JSON.stringify(entry.data, null, 2);
-    }
-    return JSON.stringify(buildRequiredScenarioWithDefaults({}), null, 2);
 }
 
 function updateSaveIndicator(state) {
