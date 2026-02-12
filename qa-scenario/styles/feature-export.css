@@ -13,17 +13,18 @@
     border-radius: 0;
   }
 
+  .export-split #btn-export {
+    border-right: 1px solid var(--border-color);
+  }
+
   .btn-export-menu {
+    position: relative;
     width: 30px;
     min-width: 30px;
     min-height: 30px;
     padding: 0;
     justify-content: center;
     letter-spacing: 1px;
-  }
-
-  .export-split .btn + .btn {
-    border-left: 1px solid var(--border-muted);
   }
 
   .btn-export-menu[aria-expanded="true"] {
