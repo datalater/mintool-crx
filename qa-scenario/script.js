@@ -25,6 +25,7 @@ import {
 } from './modules/editor-view-state-manager.js';
 import { setupMainEventListeners } from './modules/event-listener-manager.js';
 import { updateFolderToggleButtonStateView, toggleAllFoldersState } from './modules/tree-folder-state-manager.js';
+import { buildTreeRenderOptions } from './modules/tree-actions-manager.js';
 
 // --- Global State Mirroring the original ---
 const EL = {
@@ -328,61 +329,16 @@ function applyErrorPosition(position) {
 }
 
 function renderTree() {
-    UI.renderFileTree(EL.fileTree, workspace, {
-        activeFileDirty,
-        onToggleFolder: (id) => {
-            const expanded = new Set(workspace.uiState.expandedFolderIds);
-            if (expanded.has(id)) expanded.delete(id); else expanded.add(id);
-            workspace.uiState.expandedFolderIds = Array.from(expanded);
-            workspace.uiState.selectedFolderId = id;
-            workspace.uiState.selectedFileId = null;
-            workspace.uiState.lastSelectionType = 'folder';
-            lastTreeSelectionType = 'folder';
-            persist();
-        },
-        onSelectFile: (id) => {
-            workspace.uiState.activeFileId = id;
-            workspace.uiState.selectedFolderId = Workspace.getFileById(workspace, id).folderId;
-            workspace.uiState.selectedFileId = id;
-            workspace.uiState.lastSelectionType = 'file';
-            lastTreeSelectionType = 'file';
-            persist();
-            loadActiveFile();
-        },
-        onRenameFolder: (id) => {
-            const f = Workspace.getFolderById(workspace, id);
-            const n = window.prompt('Rename folder', f.name);
-            if (n) { f.name = Workspace.getNextAvailableFolderName(workspace, n, id); persist(); }
-        },
-        onDeleteFolder: (id) => {
-            workspace.folders = workspace.folders.filter(f => f.id !== id);
-            workspace.files = workspace.files.filter(f => f.folderId !== id);
-            if (workspace.uiState.selectedFolderId === id) {
-                workspace.uiState.selectedFolderId = null;
-            }
-            if (workspace.uiState.selectedFileId) {
-                const selectedFile = Workspace.getFileById(workspace, workspace.uiState.selectedFileId);
-                if (!selectedFile || selectedFile.folderId === id) {
-                    workspace.uiState.selectedFileId = null;
-                }
-            }
-            persist();
-            loadActiveFile();
-        },
-        onRenameFile: (id) => {
-            const f = Workspace.getFileById(workspace, id);
-            const n = window.prompt('Rename file', f.name);
-            if (n) { f.name = Workspace.getNextAvailableFileName(workspace, f.folderId, n, id); persist(); }
-        },
-        onDeleteFile: (id) => {
-            workspace.files = workspace.files.filter(f => f.id !== id);
-            if (workspace.uiState.selectedFileId === id) {
-                workspace.uiState.selectedFileId = null;
-            }
-            persist();
-            loadActiveFile();
-        }
+    const treeOptions = buildTreeRenderOptions({
+        getWorkspace: () => workspace,
+        getActiveFileDirty: () => activeFileDirty,
+        setLastTreeSelectionType: (nextType) => { lastTreeSelectionType = nextType; },
+        persist,
+        loadActiveFile,
+        workspaceApi: Workspace,
+        prompt: (message, defaultValue) => window.prompt(message, defaultValue)
     });
+    UI.renderFileTree(EL.fileTree, workspace, treeOptions);
     updateFolderToggleButtonState();
 }
 
