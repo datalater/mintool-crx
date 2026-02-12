@@ -14,6 +14,15 @@ import { createTreeMenuManager } from './modules/tree-menu-manager.js';
 import { getLineColumn, getPositionFromLineColumn, findTrailingCommaPosition, normalizeErrorPosition } from './modules/text-position-utils.js';
 import { createEditorSelectionManager } from './modules/editor-selection-manager.js';
 import { resolveParseErrorPosition, formatParseErrorMessage, formatRuntimeErrorMessage, getSafeErrorMessage } from './modules/json-error-manager.js';
+import {
+    updateSaveIndicatorView,
+    applyLineNumberVisibilityView,
+    applyLineNumberPreferenceFromWorkspace,
+    updateLineNumbersView,
+    setJsonValidationValidView,
+    setJsonValidationErrorView,
+    updateJsonErrorMessageView
+} from './modules/editor-view-state-manager.js';
 
 // --- Global State Mirroring the original ---
 const EL = {
@@ -594,43 +603,24 @@ async function handleImportFile(file) {
 }
 
 function updateSaveIndicator(state) {
-    EL.saveIndicator.classList.remove('is-dirty', 'is-saving', 'is-saved');
-    EL.saveIndicator.classList.add(`is-${state}`);
-    if (state === 'saved') {
-        updateLastSavedTime(workspace?.updatedAt);
-    } else if (state === 'dirty' && EL.saveIndicatorTime) {
-        EL.saveIndicatorTime.textContent = '';
-    }
-    EL.saveIndicatorLabel.textContent = state === 'dirty' ? 'Unsaved' : (state === 'saving' ? 'Saving...' : 'Saved');
-}
-
-function updateLastSavedTime(value) {
-    if (!EL.saveIndicatorTime) return;
-    EL.saveIndicatorTime.textContent = formatSavedTime(value);
-}
-
-function formatSavedTime(value) {
-    const date = value ? new Date(value) : new Date();
-    if (Number.isNaN(date.getTime())) return '---- -- -- --:--:--';
-    const yyyy = String(date.getFullYear());
-    const mon = String(date.getMonth() + 1).padStart(2, '0');
-    const dd = String(date.getDate()).padStart(2, '0');
-    const hh = String(date.getHours()).padStart(2, '0');
-    const mm = String(date.getMinutes()).padStart(2, '0');
-    const ss = String(date.getSeconds()).padStart(2, '0');
-    return `${yyyy}-${mon}-${dd} ${hh}:${mm}:${ss}`;
+    updateSaveIndicatorView({
+        saveIndicator: EL.saveIndicator,
+        saveIndicatorTime: EL.saveIndicatorTime,
+        saveIndicatorLabel: EL.saveIndicatorLabel
+    }, state, workspace?.updatedAt);
 }
 
 function applyLineNumberVisibility() {
-    const shouldShow = EL.toggleLineNumbers.checked;
-    EL.editorWrapper.classList.toggle('has-line-numbers', shouldShow);
-    if (shouldShow) updateLineNumbers();
-    persistLineNumberPreference(shouldShow);
+    applyLineNumberVisibilityView({
+        toggleLineNumbers: EL.toggleLineNumbers,
+        editorWrapper: EL.editorWrapper,
+        editing: EL.editing,
+        lineNumbers: EL.lineNumbers
+    }, persistLineNumberPreference);
 }
 
 function applyLineNumberPreference() {
-    if (!workspace?.uiState) return;
-    EL.toggleLineNumbers.checked = workspace.uiState.showLineNumbers !== false;
+    applyLineNumberPreferenceFromWorkspace(workspace, EL.toggleLineNumbers);
 }
 
 function persistLineNumberPreference(shouldShow) {
@@ -691,9 +681,7 @@ function isFileTreeVisible() {
 }
 
 function updateLineNumbers() {
-    const lineCount = Math.max(1, EL.editing.value.split('\n').length);
-    const lines = Array.from({ length: lineCount }, (_, i) => i + 1);
-    EL.lineNumbers.textContent = lines.join('\n');
+    updateLineNumbersView(EL.editing, EL.lineNumbers);
 }
 
 function renderEditorFromCurrentData() {
@@ -704,23 +692,19 @@ function renderEditorFromCurrentData() {
 }
 
 function setJsonValidationValidState() {
-    EL.jsonStatus.textContent = "Valid";
-    EL.jsonStatus.classList.remove('error');
-    updateErrorPosition(-1);
-    updateErrorMessage('');
+    setJsonValidationValidView(
+        EL.jsonStatus,
+        () => updateErrorPosition(-1),
+        updateErrorMessage
+    );
 }
 
 function setJsonValidationErrorState(label) {
-    EL.jsonStatus.textContent = label;
-    EL.jsonStatus.classList.add('error');
+    setJsonValidationErrorView(EL.jsonStatus, label);
 }
 
 function updateErrorMessage(message) {
-    if (!EL.jsonErrorMessage) return;
-    const normalized = String(message || '').trim();
-    EL.jsonErrorMessage.textContent = normalized;
-    EL.jsonErrorMessage.title = normalized;
-    EL.jsonErrorMessage.classList.toggle('is-hidden', !normalized);
+    updateJsonErrorMessageView(EL.jsonErrorMessage, message);
 }
 
 function hasSteps(data) {
