@@ -27,6 +27,7 @@ import { setupMainEventListeners } from './modules/event-listener-manager.js';
 import { updateFolderToggleButtonStateView, toggleAllFoldersState } from './modules/tree-folder-state-manager.js';
 import { buildTreeRenderOptions } from './modules/tree-actions-manager.js';
 import { createEditorHighlightManager } from './modules/editor-highlight-manager.js';
+import { isEditorSaveShortcut, isEditorUndoShortcut, isEditorRedoShortcut, runNativeEditCommand } from './modules/editor-shortcut-manager.js';
 
 // --- Global State Mirroring the original ---
 const EL = {
@@ -266,6 +267,16 @@ function handleEditorKeydown(event) {
         return;
     }
 
+    if (isEditorUndoShortcut(event) || isEditorRedoShortcut(event)) {
+        event.preventDefault();
+        const command = isEditorRedoShortcut(event) ? 'redo' : 'undo';
+        const handled = runNativeEditCommand(document, command);
+        if (handled) {
+            setTimeout(handleEditorInput, 0);
+        }
+        return;
+    }
+
     if (event.key !== 'Tab' && event.code !== 'Tab') return;
     event.preventDefault();
     const isShift = event.shiftKey || event.getModifierState('Shift');
@@ -275,13 +286,6 @@ function handleEditorKeydown(event) {
         editorSelectionManager.indentSelection();
     }
     handleEditorInput();
-}
-
-function isEditorSaveShortcut(event) {
-    if (!event || event.isComposing) return false;
-    const hasPrimaryModifier = event.metaKey || event.ctrlKey;
-    const isSaveKey = event.key === 's' || event.key === 'S' || event.code === 'KeyS';
-    return hasPrimaryModifier && isSaveKey && !event.shiftKey && !event.altKey;
 }
 
 function runFormatAndSave() {

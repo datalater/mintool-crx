@@ -9,22 +9,20 @@ export function createEditorSelectionManager(editing) {
 
     function updateSelectionBlock(transformLine, getDelta) {
         const info = getSelectionInfo();
-        if (!info.hasSelection || info.startLine === info.endLine) return;
-        const { lines, lineStarts } = splitLines(info.block);
+        const block = info.text.slice(info.blockStart, info.blockEnd);
+        const { lines, lineStarts } = splitLines(block);
         const deltas = lines.map(getDelta);
         const nextBlock = lines.map(transformLine).join('\n');
-        applyBlockUpdate(info, lineStarts, deltas, info.block, nextBlock);
+        applyBlockUpdate(info, lineStarts, deltas, nextBlock);
     }
 
     function getSelectionInfo() {
         const start = editing.selectionStart;
         const end = editing.selectionEnd;
-        const value = editing.value;
-        const startLine = value.lastIndexOf('\n', start - 1) + 1;
-        const endLine = getBlockEnd(value, end);
-        const hasSelection = end > start;
-        const block = value.slice(startLine, endLine);
-        return { start, end, value, startLine, endLine, hasSelection, block };
+        const text = editing.value;
+        const blockStart = text.lastIndexOf('\n', start - 1) + 1;
+        const blockEnd = getBlockEnd(text, end);
+        return { text, start, end, blockStart, blockEnd };
     }
 
     function getBlockEnd(text, end) {
@@ -55,16 +53,15 @@ export function createEditorSelectionManager(editing) {
         return line;
     }
 
-    function applyBlockUpdate(info, lineStarts, deltas, block, nextBlock) {
-        editing.value = info.value.slice(0, info.startLine) + nextBlock + info.value.slice(info.endLine);
+    function applyBlockUpdate(info, lineStarts, deltas, nextBlock) {
+        const startInBlock = info.start - info.blockStart;
+        const endInBlock = info.end - info.blockStart;
+        const nextStart = info.blockStart + adjustIndex(startInBlock, lineStarts, deltas);
+        const nextEnd = info.blockStart + adjustIndex(endInBlock, lineStarts, deltas);
 
-        const relativeStart = info.start - info.startLine;
-        const relativeEnd = info.end - info.startLine;
-        const nextRelativeStart = adjustIndex(relativeStart, lineStarts, deltas);
-        const nextRelativeEnd = adjustIndex(relativeEnd, lineStarts, deltas);
-
-        editing.selectionStart = info.startLine + nextRelativeStart;
-        editing.selectionEnd = info.startLine + Math.min(nextBlock.length, Math.max(nextRelativeEnd, nextRelativeStart));
+        editing.setRangeText(nextBlock, info.blockStart, info.blockEnd, 'select');
+        editing.selectionStart = nextStart;
+        editing.selectionEnd = nextEnd;
     }
 
     function adjustIndex(indexInBlock, lineStarts, deltas) {
