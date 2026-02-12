@@ -8,6 +8,7 @@ import * as Editor from './modules/editor-manager.js';
 import { captureEditorSelectionSnapshot, restoreEditorSelectionSnapshot } from './modules/editor-caret-manager.js';
 import { createResizerLayoutManager } from './modules/resizer-layout-manager.js';
 import { buildExportPayload, buildRequiredScenarioWithDefaults, formatExportFilenameDate } from './modules/export-data-manager.js';
+import { createExportMenuManager } from './modules/export-menu-manager.js';
 
 // --- Global State Mirroring the original ---
 const EL = {
@@ -69,8 +70,8 @@ const DEFAULT_FILE_TREE_WIDTH = 260;
 const MIN_FILE_TREE_WIDTH = 180;
 const MIN_JSON_EDITOR_WIDTH = 280;
 let stepHighlightRange = null;
-let visibleExportFieldPaths = [];
 let resizerLayout = null;
+let exportMenuManager = null;
 
 const EXPORT_MODE_ALL = 'all';
 const EXPORT_MODE_CUSTOM = 'custom';
@@ -85,12 +86,12 @@ const REQUIRED_EXPORT_FIELDS = [
     'steps.then',
     'steps.pass'
 ];
-const REQUIRED_EXPORT_FIELD_SET = new Set(REQUIRED_EXPORT_FIELDS);
 
 // --- Initialization ---
 
 function init() {
     setupResizerLayout();
+    setupExportMenuManager();
     loadWorkspace();
     setupEventListeners();
     resizerLayout.setupResizing();
@@ -115,6 +116,35 @@ function setupResizerLayout() {
         minEditorWidth: MIN_EDITOR_WIDTH,
         minFileTreeWidth: MIN_FILE_TREE_WIDTH,
         minJsonEditorWidth: MIN_JSON_EDITOR_WIDTH
+    });
+}
+
+function setupExportMenuManager() {
+    exportMenuManager = createExportMenuManager({
+        el: {
+            btnExport: EL.btnExport,
+            exportSplit: EL.exportSplit,
+            btnExportMenu: EL.btnExportMenu,
+            exportOptionsMenu: EL.exportOptionsMenu,
+            exportModeAll: EL.exportModeAll,
+            exportModeCustom: EL.exportModeCustom,
+            exportCustomOptions: EL.exportCustomOptions,
+            exportFieldSearch: EL.exportFieldSearch,
+            btnExportSelectAll: EL.btnExportSelectAll,
+            btnExportClearAll: EL.btnExportClearAll,
+            exportFieldList: EL.exportFieldList,
+            exportFieldCount: EL.exportFieldCount,
+            exportFieldEmpty: EL.exportFieldEmpty
+        },
+        getWorkspace: () => workspace,
+        persistWorkspace: () => Workspace.persistWorkspace(workspace),
+        parseJson: tryParseJson,
+        closeTreeMenu,
+        requiredExportFields: REQUIRED_EXPORT_FIELDS,
+        exportModeAll: EXPORT_MODE_ALL,
+        exportModeCustom: EXPORT_MODE_CUSTOM,
+        exportModeRequiredLegacy: EXPORT_MODE_REQUIRED_LEGACY,
+        exportModes: EXPORT_MODES
     });
 }
 
@@ -492,378 +522,29 @@ function handleTreeMenuEscape(event) {
 }
 
 function setupExportMenu() {
-    if (!EL.btnExportMenu || !EL.exportOptionsMenu) return;
-    EL.btnExportMenu.addEventListener('click', (event) => {
-        event.stopPropagation();
-        toggleExportMenu();
-    });
-
-    const modeInputs = [EL.exportModeAll, EL.exportModeCustom].filter(Boolean);
-    modeInputs.forEach((input) => {
-        input.addEventListener('change', handleExportModeChange);
-    });
-
-    if (EL.exportFieldSearch) {
-        EL.exportFieldSearch.addEventListener('input', renderExportFieldList);
-    }
-    if (EL.exportFieldList) {
-        EL.exportFieldList.addEventListener('change', handleExportFieldSelectionChange);
-    }
-    if (EL.btnExportSelectAll) {
-        EL.btnExportSelectAll.addEventListener('click', selectVisibleExportFields);
-    }
-    if (EL.btnExportClearAll) {
-        EL.btnExportClearAll.addEventListener('click', clearVisibleExportFields);
-    }
-
-    document.addEventListener('click', handleExportMenuOutsideClick);
-    document.addEventListener('keydown', handleExportMenuEscape);
-    syncExportOptionUiFromWorkspace();
-}
-
-function toggleExportMenu() {
-    setExportMenuOpen(!EL.exportOptionsMenu.classList.contains('is-open'));
-}
-
-function setExportMenuOpen(isOpen) {
-    if (!EL.exportOptionsMenu || !EL.btnExportMenu) return;
-    EL.exportOptionsMenu.classList.toggle('is-open', isOpen);
-    EL.btnExportMenu.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-    if (isOpen) {
-        closeTreeMenu();
-        if (EL.exportFieldSearch) {
-            EL.exportFieldSearch.value = '';
-        }
-        renderExportFieldList();
-    }
+    exportMenuManager.setup();
 }
 
 function closeExportMenu() {
-    setExportMenuOpen(false);
-}
-
-function handleExportMenuOutsideClick(event) {
-    if (!EL.exportOptionsMenu || !EL.exportSplit) return;
-    if (EL.exportSplit.contains(event.target)) return;
-    closeExportMenu();
-}
-
-function handleExportMenuEscape(event) {
-    if (event.key !== 'Escape') return;
-    closeExportMenu();
+    if (!exportMenuManager) return;
+    exportMenuManager.closeMenu();
 }
 
 function syncExportOptionUiFromWorkspace() {
-    const preferences = getExportPreferences();
-    setExportModeInputState(preferences.mode);
-    updateExportMenuVisibility(preferences.mode);
-    updateExportButtonLabel(preferences.mode);
-    renderExportFieldList();
-}
-
-function handleExportModeChange(event) {
-    const nextMode = normalizeExportMode(event?.target?.value);
-    const previous = getExportPreferences();
-    persistExportPreferences({ mode: nextMode, customFields: previous.customFields });
-    setExportModeInputState(nextMode);
-    updateExportMenuVisibility(nextMode);
-    updateExportButtonLabel(nextMode);
-    renderExportFieldList();
-}
-
-function setExportModeInputState(mode) {
-    if (EL.exportModeAll) EL.exportModeAll.checked = mode === EXPORT_MODE_ALL;
-    if (EL.exportModeCustom) EL.exportModeCustom.checked = mode === EXPORT_MODE_CUSTOM;
-}
-
-function updateExportMenuVisibility(mode) {
-    if (!EL.exportCustomOptions) return;
-    EL.exportCustomOptions.classList.toggle('is-hidden', mode !== EXPORT_MODE_CUSTOM);
-}
-
-function updateExportButtonLabel(mode) {
-    if (!EL.btnExport) return;
-    const modeLabel = mode === EXPORT_MODE_CUSTOM ? '직접 선택' : '전체 필드';
-    EL.btnExport.title = `Export (${modeLabel})`;
-    EL.btnExport.setAttribute('aria-label', `Export (${modeLabel})`);
+    if (!exportMenuManager) return;
+    exportMenuManager.syncUiFromWorkspace();
 }
 
 function getExportPreferences() {
-    const uiState = workspace?.uiState || {};
-    return {
-        mode: normalizeExportMode(uiState.exportMode),
-        customFields: normalizeCustomExportFields(uiState.customExportFields)
-    };
+    return exportMenuManager.getExportPreferences();
 }
 
 function normalizeExportMode(value) {
-    if (value === EXPORT_MODE_REQUIRED_LEGACY) return EXPORT_MODE_CUSTOM;
-    return EXPORT_MODES.has(value) ? value : EXPORT_MODE_ALL;
-}
-
-function normalizeCustomExportFields(fields) {
-    if (!Array.isArray(fields)) return [];
-    const deduped = new Set();
-    fields.forEach((field) => {
-        const canonical = canonicalizeExportFieldPath(field);
-        if (!canonical) return;
-        if (isRequiredExportFieldPath(canonical)) return;
-        deduped.add(canonical);
-    });
-    return [...deduped];
+    return exportMenuManager.normalizeExportMode(value);
 }
 
 function canonicalizeExportFieldPath(value) {
-    if (typeof value !== 'string') return '';
-    const trimmed = value.trim();
-    if (!trimmed) return '';
-    const withoutArrays = trimmed.replace(/\[\]/g, '');
-    const normalized = withoutArrays.replace(/\.{2,}/g, '.').replace(/^\.|\.$/g, '');
-    return normalized;
-}
-
-function persistExportPreferences(preferences) {
-    if (!workspace?.uiState) return;
-    workspace.uiState.exportMode = normalizeExportMode(preferences.mode);
-    workspace.uiState.customExportFields = normalizeCustomExportFields(preferences.customFields);
-    Workspace.persistWorkspace(workspace);
-}
-
-function renderExportFieldList() {
-    if (!EL.exportFieldList || !EL.exportFieldCount || !EL.exportFieldEmpty) return;
-
-    const preferences = getExportPreferences();
-    const allFields = collectWorkspaceFieldPaths();
-    const requiredFields = allFields.filter(isRequiredExportFieldPath);
-    const optionalFields = allFields.filter(field => !isRequiredExportFieldPath(field));
-    const normalizedCustomFields = normalizeHierarchicalExportSelections(preferences.customFields, optionalFields);
-    if (!hasSameFieldSet(preferences.customFields, normalizedCustomFields)) {
-        persistExportPreferences({ mode: preferences.mode, customFields: normalizedCustomFields });
-    }
-
-    const query = (EL.exportFieldSearch?.value || '').trim().toLowerCase();
-    const visibleOptional = query
-        ? optionalFields.filter(field => field.toLowerCase().includes(query))
-        : optionalFields;
-    visibleExportFieldPaths = visibleOptional;
-
-    EL.exportFieldList.innerHTML = '';
-    if (visibleOptional.length === 0 && query) {
-        EL.exportFieldEmpty.classList.remove('is-hidden');
-    } else {
-        EL.exportFieldEmpty.classList.add('is-hidden');
-    }
-
-    const selectedFields = new Set(normalizedCustomFields);
-    const fragment = document.createDocumentFragment();
-
-    requiredFields.forEach((field) => {
-        fragment.appendChild(createExportFieldOption(field, {
-            checked: true,
-            required: true
-        }));
-    });
-
-    visibleOptional.forEach((field) => {
-        fragment.appendChild(createExportFieldOption(field, {
-            checked: selectedFields.has(field),
-            indeterminate: !selectedFields.has(field) && hasSelectedDescendantField(field, selectedFields),
-            required: false
-        }));
-    });
-
-    EL.exportFieldList.appendChild(fragment);
-
-    EL.exportFieldCount.textContent = `required ${requiredFields.length} (always included) · selected ${selectedFields.size} / optional ${optionalFields.length}`;
-}
-
-function createExportFieldOption(field, options = {}) {
-    const isRequired = options.required === true;
-    const isChecked = isRequired || options.checked === true;
-    const isIndeterminate = options.indeterminate === true;
-    const label = document.createElement('label');
-    label.className = isRequired ? 'export-field-option is-required' : 'export-field-option';
-    label.title = isRequired ? 'required field' : field;
-
-    const checkbox = document.createElement('input');
-    checkbox.type = 'checkbox';
-    checkbox.dataset.field = field;
-    checkbox.checked = isChecked;
-    checkbox.disabled = isRequired;
-    if (!isRequired) {
-        checkbox.indeterminate = isIndeterminate;
-    }
-
-    const name = document.createElement('span');
-    name.className = 'export-field-name';
-    name.textContent = field;
-
-    if (isRequired) {
-        const badge = document.createElement('span');
-        badge.className = 'export-required-badge';
-        badge.textContent = 'required';
-        badge.title = 'required field';
-        label.appendChild(checkbox);
-        label.appendChild(name);
-        label.appendChild(badge);
-        return label;
-    }
-
-    label.appendChild(checkbox);
-    label.appendChild(name);
-    return label;
-}
-
-function isRequiredExportFieldPath(field) {
-    const canonical = canonicalizeExportFieldPath(field);
-    return REQUIRED_EXPORT_FIELD_SET.has(canonical);
-}
-
-function hasSameFieldSet(left, right) {
-    if (left.length !== right.length) return false;
-    const leftSet = new Set(left);
-    for (const field of right) {
-        if (!leftSet.has(field)) return false;
-    }
-    return true;
-}
-
-function normalizeHierarchicalExportSelections(fields, allOptionalFields) {
-    const optionalSet = new Set(allOptionalFields);
-    const normalized = new Set();
-
-    fields.forEach((field) => {
-        const canonical = canonicalizeExportFieldPath(field);
-        if (!canonical) return;
-        if (!optionalSet.has(canonical)) return;
-        normalized.add(canonical);
-    });
-
-    const sortedFields = [...allOptionalFields].sort((left, right) => {
-        return getFieldDepth(right) - getFieldDepth(left);
-    });
-
-    sortedFields.forEach((field) => {
-        const descendants = getStrictDescendantFieldPaths(field, allOptionalFields);
-        if (descendants.length === 0) return;
-        if (descendants.every(descendant => normalized.has(descendant))) {
-            normalized.add(field);
-            return;
-        }
-        normalized.delete(field);
-    });
-
-    return [...normalized].sort((a, b) => a.localeCompare(b));
-}
-
-function getFieldDepth(field) {
-    if (!field) return 0;
-    return field.split('.').filter(Boolean).length;
-}
-
-function hasSelectedDescendantField(field, selectedFields) {
-    const prefix = `${field}.`;
-    for (const selected of selectedFields) {
-        if (selected.startsWith(prefix)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-function getStrictDescendantFieldPaths(field, allFields) {
-    const prefix = `${field}.`;
-    return allFields.filter(candidate => candidate.startsWith(prefix));
-}
-
-function getDescendantFieldPaths(field, allFields) {
-    const prefix = `${field}.`;
-    return allFields.filter(candidate => candidate === field || candidate.startsWith(prefix));
-}
-
-function applyFieldSelectionWithHierarchy(selectedFields, field, isChecked, allOptionalFields) {
-    const targets = getDescendantFieldPaths(field, allOptionalFields);
-    targets.forEach((target) => {
-        if (isChecked) {
-            selectedFields.add(target);
-        } else {
-            selectedFields.delete(target);
-        }
-    });
-}
-
-function handleExportFieldSelectionChange(event) {
-    const target = event.target;
-    if (!target || target.type !== 'checkbox') return;
-    if (target.disabled) return;
-    const field = canonicalizeExportFieldPath(target.dataset.field);
-    if (!field) return;
-
-    const preferences = getExportPreferences();
-    const selected = new Set(preferences.customFields);
-    const allOptionalFields = getOptionalExportFieldPaths();
-    applyFieldSelectionWithHierarchy(selected, field, target.checked, allOptionalFields);
-    const normalized = normalizeHierarchicalExportSelections([...selected], allOptionalFields);
-    persistExportPreferences({ mode: preferences.mode, customFields: normalized });
-    renderExportFieldList();
-}
-
-function selectVisibleExportFields() {
-    const preferences = getExportPreferences();
-    const selected = new Set(preferences.customFields);
-    const allOptionalFields = getOptionalExportFieldPaths();
-    visibleExportFieldPaths.forEach((field) => {
-        applyFieldSelectionWithHierarchy(selected, field, true, allOptionalFields);
-    });
-    const normalized = normalizeHierarchicalExportSelections([...selected], allOptionalFields);
-    persistExportPreferences({ mode: preferences.mode, customFields: normalized });
-    renderExportFieldList();
-}
-
-function clearVisibleExportFields() {
-    const preferences = getExportPreferences();
-    const selected = new Set(preferences.customFields);
-    const allOptionalFields = getOptionalExportFieldPaths();
-    visibleExportFieldPaths.forEach((field) => {
-        applyFieldSelectionWithHierarchy(selected, field, false, allOptionalFields);
-    });
-    const normalized = normalizeHierarchicalExportSelections([...selected], allOptionalFields);
-    persistExportPreferences({ mode: preferences.mode, customFields: normalized });
-    renderExportFieldList();
-}
-
-function getOptionalExportFieldPaths() {
-    return collectWorkspaceFieldPaths().filter(field => !isRequiredExportFieldPath(field));
-}
-
-function collectWorkspaceFieldPaths() {
-    const paths = new Set(REQUIRED_EXPORT_FIELDS);
-    const files = Array.isArray(workspace?.files) ? workspace.files : [];
-
-    files.forEach((file) => {
-        const parsed = tryParseJson(file?.content);
-        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
-        collectFieldPaths(parsed, '', paths);
-    });
-
-    return [...paths].sort((a, b) => a.localeCompare(b));
-}
-
-function collectFieldPaths(value, prefix, bucket) {
-    if (Array.isArray(value)) {
-        if (!prefix) return;
-        value.forEach((item) => {
-            collectFieldPaths(item, prefix, bucket);
-        });
-        return;
-    }
-
-    if (!value || typeof value !== 'object') return;
-    Object.keys(value).forEach((key) => {
-        const nextPath = prefix ? `${prefix}.${key}` : key;
-        bucket.add(nextPath);
-        collectFieldPaths(value[key], nextPath, bucket);
-    });
+    return exportMenuManager.canonicalizeFieldPath(value);
 }
 
 function handleExportClick() {
