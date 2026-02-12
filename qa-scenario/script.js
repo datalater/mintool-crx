@@ -26,6 +26,7 @@ import {
 import { setupMainEventListeners } from './modules/event-listener-manager.js';
 import { updateFolderToggleButtonStateView, toggleAllFoldersState } from './modules/tree-folder-state-manager.js';
 import { buildTreeRenderOptions } from './modules/tree-actions-manager.js';
+import { createEditorHighlightManager } from './modules/editor-highlight-manager.js';
 
 // --- Global State Mirroring the original ---
 const EL = {
@@ -86,11 +87,11 @@ const MIN_EDITOR_WIDTH = 0;
 const DEFAULT_FILE_TREE_WIDTH = 260;
 const MIN_FILE_TREE_WIDTH = 180;
 const MIN_JSON_EDITOR_WIDTH = 280;
-let stepHighlightRange = null;
 let resizerLayout = null;
 let exportMenuManager = null;
 let treeMenuManager = null;
 let editorSelectionManager = null;
+let editorHighlightManager = null;
 
 const EXPORT_MODE_ALL = 'all';
 const EXPORT_MODE_CUSTOM = 'custom';
@@ -113,6 +114,7 @@ function init() {
     setupExportMenuManager();
     setupTreeMenuManager();
     setupEditorSelectionManager();
+    setupEditorHighlightManager();
     loadWorkspace();
     setupEventListeners();
     resizerLayout.setupResizing();
@@ -125,6 +127,16 @@ function init() {
 
 function setupEditorSelectionManager() {
     editorSelectionManager = createEditorSelectionManager(EL.editing);
+}
+
+function setupEditorHighlightManager() {
+    editorHighlightManager = createEditorHighlightManager({
+        editing: EL.editing,
+        highlightOverlay: EL.highlightOverlay,
+        jsonErrorPosition: EL.jsonErrorPosition,
+        getLineColumn,
+        getEditorMetrics
+    });
 }
 
 function setupResizerLayout() {
@@ -646,53 +658,23 @@ function areAllStepsPassed(steps) {
 }
 
 function clearStepHighlight() {
-    stepHighlightRange = null;
-    EL.highlightOverlay.innerHTML = '';
+    editorHighlightManager.clearStepHighlight();
 }
 
 function renderStepHighlight(bounds) {
-    stepHighlightRange = getLineRange(EL.editing.value, bounds.start, bounds.end);
-    EL.highlightOverlay.innerHTML = '<div class="highlight-block"></div>';
-    updateStepHighlightPosition();
+    editorHighlightManager.renderStepHighlight(bounds);
 }
 
 function updateStepHighlightPosition() {
-    if (!stepHighlightRange) return;
-    const block = EL.highlightOverlay.firstElementChild;
-    if (!block) return;
-
-    const metrics = getEditorMetrics();
-    const height = Math.max(1, stepHighlightRange.endLine - stepHighlightRange.startLine + 1) * metrics.lineHeight;
-    const top = metrics.paddingTop + (stepHighlightRange.startLine - 1) * metrics.lineHeight - EL.editing.scrollTop;
-
-    block.style.top = `${top}px`;
-    block.style.height = `${height}px`;
-}
-
-function getLineRange(text, start, end) {
-    const startLoc = getLineColumn(text, start);
-    const endLoc = getLineColumn(text, end);
-    return { startLine: startLoc.line, endLine: endLoc.line };
+    editorHighlightManager.updateStepHighlightPosition();
 }
 
 function scrollToLine(position) {
-    const line = getLineColumn(EL.editing.value, position).line;
-    const metrics = getEditorMetrics();
-    const targetTop = metrics.paddingTop + (line - 1) * metrics.lineHeight;
-    EL.editing.scrollTop = Math.max(0, targetTop - (EL.editing.clientHeight / 3));
-    updateStepHighlightPosition();
+    editorHighlightManager.scrollToLine(position);
 }
 
 function updateErrorPosition(position) {
-    if (!Number.isFinite(position) || position < 0) {
-        EL.jsonErrorPosition.textContent = '';
-        EL.jsonErrorPosition.classList.add('is-hidden');
-        return;
-    }
-
-    const location = getLineColumn(EL.editing.value, position);
-    EL.jsonErrorPosition.textContent = `Line ${location.line}, Col ${location.column}`;
-    EL.jsonErrorPosition.classList.remove('is-hidden');
+    editorHighlightManager.updateErrorPosition(position);
 }
 
 function getEditorMetrics() {
