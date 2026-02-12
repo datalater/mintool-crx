@@ -5,6 +5,7 @@ import { nowTs, nowIso } from './utils/date.js';
 import * as Workspace from './modules/workspace-manager.js';
 import * as UI from './modules/ui-renderer.js';
 import * as Editor from './modules/editor-manager.js';
+import { captureEditorSelectionSnapshot, restoreEditorSelectionSnapshot } from './modules/editor-caret-manager.js';
 
 // --- Global State Mirroring the original ---
 const EL = {
@@ -193,147 +194,14 @@ function isEditorSaveShortcut(event) {
 
 function runFormatAndSave() {
     try {
-        const selectionSnapshot = captureEditorSelectionSnapshot();
+        const selectionSnapshot = captureEditorSelectionSnapshot(EL.editing);
         EL.editing.value = JSON.stringify(JSON.parse(EL.editing.value), null, 2);
-        restoreEditorSelectionSnapshot(selectionSnapshot);
+        restoreEditorSelectionSnapshot(EL.editing, selectionSnapshot);
         handleEditorInput();
         flushAutosaveAndPersist();
     } catch (e) {
         alert("Invalid JSON");
     }
-}
-
-function captureEditorSelectionSnapshot() {
-    const text = EL.editing.value;
-    return {
-        start: captureCaretAnchor(text, EL.editing.selectionStart),
-        end: captureCaretAnchor(text, EL.editing.selectionEnd),
-        direction: EL.editing.selectionDirection || 'none',
-        scrollTop: EL.editing.scrollTop,
-        scrollLeft: EL.editing.scrollLeft
-    };
-}
-
-function restoreEditorSelectionSnapshot(snapshot) {
-    if (!snapshot) return;
-    const text = EL.editing.value;
-    const nextStart = resolveCaretFromAnchor(text, snapshot.start);
-    const nextEnd = resolveCaretFromAnchor(text, snapshot.end);
-    EL.editing.setSelectionRange(nextStart, nextEnd, snapshot.direction);
-    EL.editing.scrollTop = snapshot.scrollTop;
-    EL.editing.scrollLeft = snapshot.scrollLeft;
-}
-
-function captureCaretAnchor(text, offset) {
-    const clampedOffset = Math.max(0, Math.min(offset, text.length));
-    return {
-        semanticIndex: getSemanticIndexBeforeOffset(text, clampedOffset),
-        lineColumn: getLineColumn(text, clampedOffset),
-        absoluteOffset: clampedOffset
-    };
-}
-
-function resolveCaretFromAnchor(text, anchor) {
-    const bySemantic = getOffsetFromSemanticIndex(text, anchor?.semanticIndex);
-    if (Number.isFinite(bySemantic)) return bySemantic;
-    const byLineColumn = getCaretPositionFromLineColumn(text, anchor?.lineColumn);
-    if (Number.isFinite(byLineColumn)) return byLineColumn;
-    return Math.max(0, Math.min(anchor?.absoluteOffset || 0, text.length));
-}
-
-function getSemanticIndexBeforeOffset(text, offset) {
-    const limit = Math.max(0, Math.min(offset, text.length));
-    let semanticIndex = 0;
-    let inString = false;
-    let escaped = false;
-
-    for (let i = 0; i < limit; i++) {
-        const char = text[i];
-        const significant = isSemanticCharacter(char, inString);
-        if (significant) semanticIndex += 1;
-
-        if (inString) {
-            if (escaped) {
-                escaped = false;
-                continue;
-            }
-            if (char === '\\') {
-                escaped = true;
-                continue;
-            }
-            if (char === '"') {
-                inString = false;
-            }
-            continue;
-        }
-
-        if (char === '"') {
-            inString = true;
-        }
-    }
-
-    return semanticIndex;
-}
-
-function getOffsetFromSemanticIndex(text, semanticIndex) {
-    if (!Number.isFinite(semanticIndex)) return NaN;
-    if (semanticIndex <= 0) return 0;
-
-    let seen = 0;
-    let inString = false;
-    let escaped = false;
-
-    for (let i = 0; i < text.length; i++) {
-        const char = text[i];
-        const significant = isSemanticCharacter(char, inString);
-
-        if (significant) {
-            if (seen === semanticIndex) return i;
-            seen += 1;
-        }
-
-        if (inString) {
-            if (escaped) {
-                escaped = false;
-                continue;
-            }
-            if (char === '\\') {
-                escaped = true;
-                continue;
-            }
-            if (char === '"') {
-                inString = false;
-            }
-            continue;
-        }
-
-        if (char === '"') {
-            inString = true;
-        }
-    }
-
-    return text.length;
-}
-
-function isSemanticCharacter(char, inString) {
-    if (inString) return true;
-    return !/\s/.test(char);
-}
-
-function getCaretPositionFromLineColumn(text, location) {
-    if (!location || location.line < 1 || location.column < 1) return NaN;
-    let line = 1;
-    let index = 0;
-
-    while (index < text.length && line < location.line) {
-        if (text[index] === '\n') line += 1;
-        index += 1;
-    }
-
-    const lineEnd = text.indexOf('\n', index);
-    const maxIndexOnLine = lineEnd === -1 ? text.length : lineEnd;
-    const desiredIndex = index + location.column - 1;
-    return Math.max(0, Math.min(desiredIndex, maxIndexOnLine));
 }
 
 function indentSelection() {

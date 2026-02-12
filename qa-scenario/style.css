@@ -1,4 +1,9 @@
-@import url('reset.css');
+@layer reset, base, components, features, overrides;
+@import url('styles/reset-layer.css') layer(reset);
+@import url('styles/feature-export.css') layer(features);
+@import url('styles/feature-resizer.css') layer(features);
+
+@layer base {
 
 body {
     background-color: var(--bg-color);
@@ -8,17 +13,6 @@ body {
     line-height: 1.5;
     height: 100vh;
     overflow: hidden;
-}
-
-body.is-resizing {
-    cursor: col-resize;
-    user-select: none;
-}
-
-body.is-resizing .pane,
-body.is-resizing .pane-resizer,
-body.is-resizing .file-tree-resizer {
-    transition: none !important;
 }
 
 .app-container {
@@ -61,196 +55,6 @@ body.is-resizing .file-tree-resizer {
 .actions {
     display: flex;
     gap: 8px;
-}
-
-.export-split {
-    position: relative;
-    display: inline-flex;
-    align-items: stretch;
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
-    overflow: visible;
-}
-
-.export-split .btn {
-    border: 0;
-    border-radius: 0;
-}
-
-.btn-export-menu {
-    width: 30px;
-    min-width: 30px;
-    min-height: 30px;
-    padding: 0;
-    justify-content: center;
-    letter-spacing: 1px;
-}
-
-.export-split .btn + .btn {
-    border-left: 1px solid var(--border-muted);
-}
-
-.btn-export-menu[aria-expanded="true"] {
-    background-color: #30363d;
-    border-color: #8b949e;
-}
-
-.export-options-menu {
-    position: absolute;
-    top: calc(100% + 6px);
-    right: 0;
-    width: min(280px, 92vw);
-    background: var(--pane-bg);
-    border: 1px solid var(--border-muted);
-    border-radius: 8px;
-    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.35);
-    padding: 8px;
-    display: none;
-    z-index: 200;
-}
-
-.export-options-menu.is-open {
-    display: block;
-}
-
-.export-options-group {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-}
-
-.export-radio-option {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 8px;
-    border-radius: 6px;
-    cursor: pointer;
-}
-
-.export-radio-option:hover {
-    background: rgba(56, 139, 253, 0.12);
-}
-
-.export-radio-option input[type="radio"] {
-    margin: 0;
-    accent-color: var(--accent-primary);
-}
-
-.export-custom-options {
-    margin-top: 8px;
-    padding-top: 8px;
-    border-top: 1px solid var(--border-muted);
-}
-
-.export-custom-options.is-hidden {
-    display: none;
-}
-
-.export-custom-toolbar {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.export-field-search {
-    width: 100%;
-    min-height: 28px;
-    border-radius: 6px;
-    border: 1px solid var(--border-color);
-    background: var(--editor-bg);
-    color: var(--text-primary);
-    padding: 4px 8px;
-    font-size: 12px;
-}
-
-.export-custom-actions {
-    display: inline-flex;
-    gap: 6px;
-}
-
-.export-field-count {
-    margin-top: 8px;
-    margin-bottom: 6px;
-    font-size: 11px;
-    color: var(--text-secondary);
-}
-
-.export-field-list {
-    max-height: 220px;
-    overflow-y: auto;
-    overflow-x: auto;
-    border: 1px solid var(--border-muted);
-    border-radius: 6px;
-    padding: 4px;
-    background: var(--editor-bg);
-}
-
-.export-field-option {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 12px;
-    padding: 4px 6px;
-    border-radius: 4px;
-    cursor: pointer;
-    min-width: max-content;
-}
-
-.export-field-option:hover {
-    background: rgba(56, 139, 253, 0.12);
-}
-
-.export-field-option input[type="checkbox"] {
-    margin: 0;
-    accent-color: var(--accent-primary);
-}
-
-.export-field-option.is-required {
-    background: rgba(56, 139, 253, 0.08);
-    cursor: default;
-}
-
-.export-field-option.is-required:hover {
-    background: rgba(56, 139, 253, 0.08);
-}
-
-.export-field-option.is-required input[type="checkbox"] {
-    opacity: 0.85;
-    cursor: not-allowed;
-}
-
-.export-field-name {
-    font-family: var(--font-code);
-    font-size: 11px;
-    line-height: 1.4;
-    white-space: nowrap;
-}
-
-.export-required-badge {
-    margin-left: 6px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0 6px;
-    border-radius: 999px;
-    border: 1px solid rgba(56, 139, 253, 0.45);
-    background: rgba(56, 139, 253, 0.16);
-    color: #79c0ff;
-    font-size: 10px;
-    line-height: 16px;
-    font-weight: 600;
-    text-transform: lowercase;
-}
-
-.export-field-empty {
-    margin-top: 8px;
-    font-size: 12px;
-    color: var(--text-secondary);
-}
-
-.export-field-empty.is-hidden {
-    display: none;
 }
 
 .header-controls {
@@ -357,48 +161,6 @@ body.is-resizing .file-tree-resizer {
     border-color: #d29922;
 }
 
-/* Main Content */
-.app-content {
-    flex: 1;
-    display: flex;
-    overflow: hidden;
-    position: relative;
-}
-
-.btn-fold-toggle {
-    position: absolute;
-    left: 10px;
-    top: 8px;
-    z-index: 50;
-    background: transparent;
-    border: 1px solid transparent;
-    color: var(--text-secondary);
-    cursor: pointer;
-    width: 28px;
-    height: 28px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
-    padding: 0;
-    border-radius: 6px;
-}
-
-.btn-fold-toggle:hover {
-    color: var(--text-primary);
-    background: var(--accent-secondary);
-    border-color: var(--border-color);
-}
-
-.fold-icon {
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    transform-origin: center;
-}
-
-.app-content.folded .btn-fold-toggle .fold-icon {
-    transform: rotate(180deg);
-}
-
 .pane {
     flex: 1;
     min-width: 0;
@@ -407,33 +169,6 @@ body.is-resizing .file-tree-resizer {
     background-color: var(--pane-bg);
     overflow: hidden;
     transition: flex-basis 0.18s ease, width 0.18s ease, opacity 0.18s ease;
-}
-
-.editor-pane,
-.checklist-pane {
-    min-width: 0;
-}
-
-.editor-pane.folded,
-.app-content.folded .editor-pane {
-    flex: 0 0 0px;
-    width: 0;
-    min-width: 0;
-    margin-right: -1px;
-}
-
-.app-content.folded .editor-pane + .pane-divider {
-    display: none;
-}
-
-.app-content.folded .editor-pane > * {
-    visibility: hidden;
-    opacity: 0;
-    pointer-events: none;
-}
-
-.app-content.folded .pane-resizer {
-    display: none;
 }
 
 .pane-header {
@@ -514,23 +249,6 @@ body.is-resizing .file-tree-resizer {
     line-height: 18px;
 }
 
-.pane-resizer {
-    width: var(--pane-resizer-width);
-    background-color: var(--bg-secondary);
-    border-left: 1px solid var(--border-color);
-    border-right: 1px solid var(--border-color);
-    cursor: col-resize;
-    touch-action: none;
-    transition: background-color 0.2s;
-    z-index: 10;
-    position: relative;
-}
-
-.pane-resizer:hover, .pane-resizer.resizing {
-    background-color: var(--accent-primary);
-    border-color: var(--accent-primary);
-}
-
 /* Workspace Tree */
 .editor-workspace {
     flex: 1;
@@ -578,36 +296,6 @@ body.is-resizing .file-tree-resizer {
     display: none;
 }
 
-.file-tree-resizer {
-    flex: 0 0 var(--tree-resizer-width);
-    width: var(--tree-resizer-width);
-    touch-action: none;
-    cursor: col-resize;
-    position: relative;
-    background: transparent;
-}
-
-.file-tree-resizer::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: 50%;
-    width: 1px;
-    background-color: var(--border-muted);
-    transform: translateX(-50%);
-    transition: background-color 120ms ease, width 120ms ease;
-}
-
-.file-tree-resizer:hover::before,
-.file-tree-resizer.resizing::before {
-    width: 2px;
-    background-color: var(--accent-primary);
-}
-
-.file-tree-panel.is-collapsed + .file-tree-resizer {
-    display: none;
-}
 
 .tree-toolbar {
     display: flex;
@@ -1363,4 +1051,6 @@ tr.selected-row {
 
 ::-webkit-scrollbar-thumb:hover {
     background: var(--text-secondary);
+}
+
 }
