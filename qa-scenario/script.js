@@ -1,5 +1,5 @@
 import { WORKSPACE_STORAGE_KEY } from './constants/storage.js';
-import { AUTOSAVE_DELAY_MS } from './configs/workspace.js';
+import { AUTOSAVE_DELAY_MS, WORKSPACE_VERSION, DEFAULT_FILE_NAME } from './configs/workspace.js';
 import { tryParseJson } from './utils/json.js';
 import { nowTs, nowIso } from './utils/date.js';
 import * as Workspace from './modules/workspace-manager.js';
@@ -41,6 +41,18 @@ const EL = {
     editorPane: document.getElementById('editor-pane'),
     btnImport: document.getElementById('btn-import'),
     btnExport: document.getElementById('btn-export'),
+    exportSplit: document.getElementById('export-split'),
+    btnExportMenu: document.getElementById('btn-export-menu'),
+    exportOptionsMenu: document.getElementById('export-options-menu'),
+    exportModeAll: document.getElementById('export-mode-all'),
+    exportModeCustom: document.getElementById('export-mode-custom'),
+    exportCustomOptions: document.getElementById('export-custom-options'),
+    exportFieldSearch: document.getElementById('export-field-search'),
+    btnExportSelectAll: document.getElementById('btn-export-select-all'),
+    btnExportClearAll: document.getElementById('btn-export-clear-all'),
+    exportFieldList: document.getElementById('export-field-list'),
+    exportFieldCount: document.getElementById('export-field-count'),
+    exportFieldEmpty: document.getElementById('export-field-empty'),
     fileInput: document.getElementById('file-input')
 };
 
@@ -58,6 +70,22 @@ const MIN_JSON_EDITOR_WIDTH = 280;
 let stepHighlightRange = null;
 let stopPaneResizing = () => {};
 let stopFileTreeResizing = () => {};
+let visibleExportFieldPaths = [];
+
+const EXPORT_MODE_ALL = 'all';
+const EXPORT_MODE_CUSTOM = 'custom';
+const EXPORT_MODE_REQUIRED_LEGACY = 'required';
+const EXPORT_MODES = new Set([EXPORT_MODE_ALL, EXPORT_MODE_CUSTOM]);
+const EXPORT_FORMAT = 'qa-scenario-export';
+const REQUIRED_EXPORT_FIELDS = [
+    'scenario',
+    'steps',
+    'steps.given',
+    'steps.when',
+    'steps.then',
+    'steps.pass'
+];
+const REQUIRED_EXPORT_FIELD_SET = new Set(REQUIRED_EXPORT_FIELDS);
 
 // --- Initialization ---
 
@@ -69,6 +97,7 @@ function init() {
     applyLineNumberVisibility();
     applyFileTreePreference();
     setupTreeMenu();
+    setupExportMenu();
 }
 
 function loadWorkspace() {
@@ -416,6 +445,7 @@ function setupTreeMenu() {
 }
 
 function toggleTreeMenu() {
+    closeExportMenu();
     setTreeMenuOpen(!EL.treeMenu.classList.contains('is-open'));
 }
 
@@ -439,6 +469,576 @@ function handleTreeMenuOutsideClick(event) {
 function handleTreeMenuEscape(event) {
     if (event.key !== 'Escape') return;
     setTreeMenuOpen(false);
+}
+
+function setupExportMenu() {
+    if (!EL.btnExportMenu || !EL.exportOptionsMenu) return;
+    EL.btnExportMenu.addEventListener('click', (event) => {
+        event.stopPropagation();
+        toggleExportMenu();
+    });
+
+    const modeInputs = [EL.exportModeAll, EL.exportModeCustom].filter(Boolean);
+    modeInputs.forEach((input) => {
+        input.addEventListener('change', handleExportModeChange);
+    });
+
+    if (EL.exportFieldSearch) {
+        EL.exportFieldSearch.addEventListener('input', renderExportFieldList);
+    }
+    if (EL.exportFieldList) {
+        EL.exportFieldList.addEventListener('change', handleExportFieldSelectionChange);
+    }
+    if (EL.btnExportSelectAll) {
+        EL.btnExportSelectAll.addEventListener('click', selectVisibleExportFields);
+    }
+    if (EL.btnExportClearAll) {
+        EL.btnExportClearAll.addEventListener('click', clearVisibleExportFields);
+    }
+
+    document.addEventListener('click', handleExportMenuOutsideClick);
+    document.addEventListener('keydown', handleExportMenuEscape);
+    syncExportOptionUiFromWorkspace();
+}
+
+function toggleExportMenu() {
+    setExportMenuOpen(!EL.exportOptionsMenu.classList.contains('is-open'));
+}
+
+function setExportMenuOpen(isOpen) {
+    if (!EL.exportOptionsMenu || !EL.btnExportMenu) return;
+    EL.exportOptionsMenu.classList.toggle('is-open', isOpen);
+    EL.btnExportMenu.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    if (isOpen) {
+        closeTreeMenu();
+        if (EL.exportFieldSearch) {
+            EL.exportFieldSearch.value = '';
+        }
+        renderExportFieldList();
+    }
+}
+
+function closeExportMenu() {
+    setExportMenuOpen(false);
+}
+
+function handleExportMenuOutsideClick(event) {
+    if (!EL.exportOptionsMenu || !EL.exportSplit) return;
+    if (EL.exportSplit.contains(event.target)) return;
+    closeExportMenu();
+}
+
+function handleExportMenuEscape(event) {
+    if (event.key !== 'Escape') return;
+    closeExportMenu();
+}
+
+function syncExportOptionUiFromWorkspace() {
+    const preferences = getExportPreferences();
+    setExportModeInputState(preferences.mode);
+    updateExportMenuVisibility(preferences.mode);
+    updateExportButtonLabel(preferences.mode);
+    renderExportFieldList();
+}
+
+function handleExportModeChange(event) {
+    const nextMode = normalizeExportMode(event?.target?.value);
+    const previous = getExportPreferences();
+    persistExportPreferences({ mode: nextMode, customFields: previous.customFields });
+    setExportModeInputState(nextMode);
+    updateExportMenuVisibility(nextMode);
+    updateExportButtonLabel(nextMode);
+    renderExportFieldList();
+}
+
+function setExportModeInputState(mode) {
+    if (EL.exportModeAll) EL.exportModeAll.checked = mode === EXPORT_MODE_ALL;
+    if (EL.exportModeCustom) EL.exportModeCustom.checked = mode === EXPORT_MODE_CUSTOM;
+}
+
+function updateExportMenuVisibility(mode) {
+    if (!EL.exportCustomOptions) return;
+    EL.exportCustomOptions.classList.toggle('is-hidden', mode !== EXPORT_MODE_CUSTOM);
+}
+
+function updateExportButtonLabel(mode) {
+    if (!EL.btnExport) return;
+    const modeLabel = mode === EXPORT_MODE_CUSTOM ? '직접 선택' : '전체 필드';
+    EL.btnExport.title = `Export (${modeLabel})`;
+    EL.btnExport.setAttribute('aria-label', `Export (${modeLabel})`);
+}
+
+function getExportPreferences() {
+    const uiState = workspace?.uiState || {};
+    return {
+        mode: normalizeExportMode(uiState.exportMode),
+        customFields: normalizeCustomExportFields(uiState.customExportFields)
+    };
+}
+
+function normalizeExportMode(value) {
+    if (value === EXPORT_MODE_REQUIRED_LEGACY) return EXPORT_MODE_CUSTOM;
+    return EXPORT_MODES.has(value) ? value : EXPORT_MODE_ALL;
+}
+
+function normalizeCustomExportFields(fields) {
+    if (!Array.isArray(fields)) return [];
+    const deduped = new Set();
+    fields.forEach((field) => {
+        const canonical = canonicalizeExportFieldPath(field);
+        if (!canonical) return;
+        if (isRequiredExportFieldPath(canonical)) return;
+        deduped.add(canonical);
+    });
+    return [...deduped];
+}
+
+function canonicalizeExportFieldPath(value) {
+    if (typeof value !== 'string') return '';
+    const trimmed = value.trim();
+    if (!trimmed) return '';
+    const withoutArrays = trimmed.replace(/\[\]/g, '');
+    const normalized = withoutArrays.replace(/\.{2,}/g, '.').replace(/^\.|\.$/g, '');
+    return normalized;
+}
+
+function persistExportPreferences(preferences) {
+    if (!workspace?.uiState) return;
+    workspace.uiState.exportMode = normalizeExportMode(preferences.mode);
+    workspace.uiState.customExportFields = normalizeCustomExportFields(preferences.customFields);
+    Workspace.persistWorkspace(workspace);
+}
+
+function renderExportFieldList() {
+    if (!EL.exportFieldList || !EL.exportFieldCount || !EL.exportFieldEmpty) return;
+
+    const preferences = getExportPreferences();
+    const allFields = collectWorkspaceFieldPaths();
+    const requiredFields = allFields.filter(isRequiredExportFieldPath);
+    const optionalFields = allFields.filter(field => !isRequiredExportFieldPath(field));
+    const normalizedCustomFields = normalizeHierarchicalExportSelections(preferences.customFields, optionalFields);
+    if (!hasSameFieldSet(preferences.customFields, normalizedCustomFields)) {
+        persistExportPreferences({ mode: preferences.mode, customFields: normalizedCustomFields });
+    }
+
+    const query = (EL.exportFieldSearch?.value || '').trim().toLowerCase();
+    const visibleOptional = query
+        ? optionalFields.filter(field => field.toLowerCase().includes(query))
+        : optionalFields;
+    visibleExportFieldPaths = visibleOptional;
+
+    EL.exportFieldList.innerHTML = '';
+    if (visibleOptional.length === 0 && query) {
+        EL.exportFieldEmpty.classList.remove('is-hidden');
+    } else {
+        EL.exportFieldEmpty.classList.add('is-hidden');
+    }
+
+    const selectedFields = new Set(normalizedCustomFields);
+    const fragment = document.createDocumentFragment();
+
+    requiredFields.forEach((field) => {
+        fragment.appendChild(createExportFieldOption(field, {
+            checked: true,
+            required: true
+        }));
+    });
+
+    visibleOptional.forEach((field) => {
+        fragment.appendChild(createExportFieldOption(field, {
+            checked: selectedFields.has(field),
+            indeterminate: !selectedFields.has(field) && hasSelectedDescendantField(field, selectedFields),
+            required: false
+        }));
+    });
+
+    EL.exportFieldList.appendChild(fragment);
+
+    EL.exportFieldCount.textContent = `required ${requiredFields.length} (always included) · selected ${selectedFields.size} / optional ${optionalFields.length}`;
+}
+
+function createExportFieldOption(field, options = {}) {
+    const isRequired = options.required === true;
+    const isChecked = isRequired || options.checked === true;
+    const isIndeterminate = options.indeterminate === true;
+    const label = document.createElement('label');
+    label.className = isRequired ? 'export-field-option is-required' : 'export-field-option';
+    label.title = isRequired ? 'required field' : field;
+
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.dataset.field = field;
+    checkbox.checked = isChecked;
+    checkbox.disabled = isRequired;
+    if (!isRequired) {
+        checkbox.indeterminate = isIndeterminate;
+    }
+
+    const name = document.createElement('span');
+    name.className = 'export-field-name';
+    name.textContent = field;
+
+    if (isRequired) {
+        const badge = document.createElement('span');
+        badge.className = 'export-required-badge';
+        badge.textContent = 'required';
+        badge.title = 'required field';
+        label.appendChild(checkbox);
+        label.appendChild(name);
+        label.appendChild(badge);
+        return label;
+    }
+
+    label.appendChild(checkbox);
+    label.appendChild(name);
+    return label;
+}
+
+function isRequiredExportFieldPath(field) {
+    const canonical = canonicalizeExportFieldPath(field);
+    return REQUIRED_EXPORT_FIELD_SET.has(canonical);
+}
+
+function hasSameFieldSet(left, right) {
+    if (left.length !== right.length) return false;
+    const leftSet = new Set(left);
+    for (const field of right) {
+        if (!leftSet.has(field)) return false;
+    }
+    return true;
+}
+
+function normalizeHierarchicalExportSelections(fields, allOptionalFields) {
+    const optionalSet = new Set(allOptionalFields);
+    const normalized = new Set();
+
+    fields.forEach((field) => {
+        const canonical = canonicalizeExportFieldPath(field);
+        if (!canonical) return;
+        if (!optionalSet.has(canonical)) return;
+        normalized.add(canonical);
+    });
+
+    const sortedFields = [...allOptionalFields].sort((left, right) => {
+        return getFieldDepth(right) - getFieldDepth(left);
+    });
+
+    sortedFields.forEach((field) => {
+        const descendants = getStrictDescendantFieldPaths(field, allOptionalFields);
+        if (descendants.length === 0) return;
+        if (descendants.every(descendant => normalized.has(descendant))) {
+            normalized.add(field);
+            return;
+        }
+        normalized.delete(field);
+    });
+
+    return [...normalized].sort((a, b) => a.localeCompare(b));
+}
+
+function getFieldDepth(field) {
+    if (!field) return 0;
+    return field.split('.').filter(Boolean).length;
+}
+
+function hasSelectedDescendantField(field, selectedFields) {
+    const prefix = `${field}.`;
+    for (const selected of selectedFields) {
+        if (selected.startsWith(prefix)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function getStrictDescendantFieldPaths(field, allFields) {
+    const prefix = `${field}.`;
+    return allFields.filter(candidate => candidate.startsWith(prefix));
+}
+
+function getDescendantFieldPaths(field, allFields) {
+    const prefix = `${field}.`;
+    return allFields.filter(candidate => candidate === field || candidate.startsWith(prefix));
+}
+
+function applyFieldSelectionWithHierarchy(selectedFields, field, isChecked, allOptionalFields) {
+    const targets = getDescendantFieldPaths(field, allOptionalFields);
+    targets.forEach((target) => {
+        if (isChecked) {
+            selectedFields.add(target);
+        } else {
+            selectedFields.delete(target);
+        }
+    });
+}
+
+function handleExportFieldSelectionChange(event) {
+    const target = event.target;
+    if (!target || target.type !== 'checkbox') return;
+    if (target.disabled) return;
+    const field = canonicalizeExportFieldPath(target.dataset.field);
+    if (!field) return;
+
+    const preferences = getExportPreferences();
+    const selected = new Set(preferences.customFields);
+    const allOptionalFields = getOptionalExportFieldPaths();
+    applyFieldSelectionWithHierarchy(selected, field, target.checked, allOptionalFields);
+    const normalized = normalizeHierarchicalExportSelections([...selected], allOptionalFields);
+    persistExportPreferences({ mode: preferences.mode, customFields: normalized });
+    renderExportFieldList();
+}
+
+function selectVisibleExportFields() {
+    const preferences = getExportPreferences();
+    const selected = new Set(preferences.customFields);
+    const allOptionalFields = getOptionalExportFieldPaths();
+    visibleExportFieldPaths.forEach((field) => {
+        applyFieldSelectionWithHierarchy(selected, field, true, allOptionalFields);
+    });
+    const normalized = normalizeHierarchicalExportSelections([...selected], allOptionalFields);
+    persistExportPreferences({ mode: preferences.mode, customFields: normalized });
+    renderExportFieldList();
+}
+
+function clearVisibleExportFields() {
+    const preferences = getExportPreferences();
+    const selected = new Set(preferences.customFields);
+    const allOptionalFields = getOptionalExportFieldPaths();
+    visibleExportFieldPaths.forEach((field) => {
+        applyFieldSelectionWithHierarchy(selected, field, false, allOptionalFields);
+    });
+    const normalized = normalizeHierarchicalExportSelections([...selected], allOptionalFields);
+    persistExportPreferences({ mode: preferences.mode, customFields: normalized });
+    renderExportFieldList();
+}
+
+function getOptionalExportFieldPaths() {
+    return collectWorkspaceFieldPaths().filter(field => !isRequiredExportFieldPath(field));
+}
+
+function collectWorkspaceFieldPaths() {
+    const paths = new Set(REQUIRED_EXPORT_FIELDS);
+    const files = Array.isArray(workspace?.files) ? workspace.files : [];
+
+    files.forEach((file) => {
+        const parsed = tryParseJson(file?.content);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
+        collectFieldPaths(parsed, '', paths);
+    });
+
+    return [...paths].sort((a, b) => a.localeCompare(b));
+}
+
+function collectFieldPaths(value, prefix, bucket) {
+    if (Array.isArray(value)) {
+        if (!prefix) return;
+        value.forEach((item) => {
+            collectFieldPaths(item, prefix, bucket);
+        });
+        return;
+    }
+
+    if (!value || typeof value !== 'object') return;
+    Object.keys(value).forEach((key) => {
+        const nextPath = prefix ? `${prefix}.${key}` : key;
+        bucket.add(nextPath);
+        collectFieldPaths(value[key], nextPath, bucket);
+    });
+}
+
+function handleExportClick() {
+    const preferences = getExportPreferences();
+    const payload = buildExportPayload(preferences);
+    downloadExportPayload(payload);
+}
+
+function buildExportPayload(preferences) {
+    const folderMap = new Map((workspace?.folders || []).map(folder => [folder.id, folder.name]));
+    const files = (workspace?.files || []).map((file, index) => buildExportFileRecord(file, index, folderMap, preferences));
+
+    return {
+        format: EXPORT_FORMAT,
+        version: WORKSPACE_VERSION,
+        exportedAt: nowIso(),
+        exportMode: preferences.mode,
+        requiredFields: [...REQUIRED_EXPORT_FIELDS],
+        customFields: preferences.mode === EXPORT_MODE_CUSTOM ? preferences.customFields : [],
+        files
+    };
+}
+
+function buildExportFileRecord(file, index, folderMap, preferences) {
+    const name = typeof file?.name === 'string' && file.name.trim()
+        ? file.name
+        : `scenario-${index + 1}.json`;
+    const folder = folderMap.get(file?.folderId) || 'Imported';
+    const parsed = tryParseJson(file?.content);
+    const base = { name, folder };
+
+    if (parsed === null) {
+        return {
+            ...base,
+            rawContent: file?.content || ''
+        };
+    }
+
+    return {
+        ...base,
+        data: buildScenarioDataForExport(parsed, preferences)
+    };
+}
+
+function buildScenarioDataForExport(parsed, preferences) {
+    if (preferences.mode === EXPORT_MODE_ALL) {
+        return parsed;
+    }
+
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return buildRequiredScenarioWithDefaults({});
+    }
+
+    const selectedPaths = preferences.mode === EXPORT_MODE_CUSTOM
+        ? [...REQUIRED_EXPORT_FIELDS, ...preferences.customFields]
+        : [...REQUIRED_EXPORT_FIELDS];
+    const selectorTree = buildFieldSelectorTree(selectedPaths);
+    const selected = selectValueByFieldTree(parsed, selectorTree);
+    return buildRequiredScenarioWithDefaults(selected);
+}
+
+function buildRequiredScenarioWithDefaults(input) {
+    const source = input && typeof input === 'object' && !Array.isArray(input) ? { ...input } : {};
+    const scenario = typeof source.scenario === 'string' && source.scenario.trim()
+        ? source.scenario
+        : 'Untitled Scenario';
+    const steps = Array.isArray(source.steps)
+        ? source.steps.map(step => buildRequiredStepWithDefaults(step))
+        : [];
+    return {
+        ...source,
+        scenario,
+        steps
+    };
+}
+
+function buildRequiredStepWithDefaults(input) {
+    const source = input && typeof input === 'object' && !Array.isArray(input) ? { ...input } : {};
+    return {
+        ...source,
+        given: toChecklistArray(source.given),
+        when: toChecklistArray(source.when),
+        then: toChecklistArray(source.then),
+        pass: source.pass === true
+    };
+}
+
+function buildFieldSelectorTree(paths) {
+    const root = createFieldSelectorNode();
+    paths.forEach((path) => {
+        const canonical = canonicalizeExportFieldPath(path);
+        if (!canonical) return;
+        const tokens = canonical.split('.').filter(Boolean);
+        appendFieldSelectorPath(root, tokens);
+    });
+    return root;
+}
+
+function createFieldSelectorNode() {
+    return {
+        includeSelf: false,
+        children: new Map()
+    };
+}
+
+function appendFieldSelectorPath(root, tokens) {
+    let current = root;
+    tokens.forEach((token, index) => {
+        if (!current.children.has(token)) {
+            current.children.set(token, createFieldSelectorNode());
+        }
+        current = current.children.get(token);
+        if (index === tokens.length - 1) {
+            current.includeSelf = true;
+        }
+    });
+}
+
+function selectValueByFieldTree(value, node) {
+    if (!node) return undefined;
+    if (Array.isArray(value)) return selectArrayByFieldTree(value, node);
+    if (!value || typeof value !== 'object') {
+        return node.includeSelf ? value : undefined;
+    }
+
+    if (node.includeSelf && node.children.size === 0) {
+        return cloneExportValue(value);
+    }
+
+    const output = {};
+    node.children.forEach((childNode, key) => {
+        const childValue = selectValueByFieldTree(value[key], childNode);
+        if (childValue !== undefined) {
+            output[key] = childValue;
+        }
+    });
+
+    if (Object.keys(output).length > 0) {
+        return output;
+    }
+
+    if (node.includeSelf) {
+        return cloneExportValue(value);
+    }
+    return undefined;
+}
+
+function selectArrayByFieldTree(value, node) {
+    if (!Array.isArray(value)) return undefined;
+
+    if (node.includeSelf && node.children.size === 0) {
+        return cloneExportValue(value);
+    }
+
+    const selectedItems = value.map(item => selectValueByFieldTree(item, node));
+
+    if (selectedItems.some(item => item !== undefined)) {
+        return selectedItems.map(item => (item === undefined ? {} : item));
+    }
+
+    if (node.includeSelf) {
+        return cloneExportValue(value);
+    }
+    return [];
+}
+
+function cloneExportValue(value) {
+    if (value === null || value === undefined) return value;
+    if (typeof value !== 'object') return value;
+    try {
+        return JSON.parse(JSON.stringify(value));
+    } catch (_) {
+        return value;
+    }
+}
+
+function downloadExportPayload(payload) {
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `qa-scenarios-${formatExportFilenameDate(new Date())}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+function formatExportFilenameDate(date) {
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) return 'unknown-date';
+    const yyyy = String(date.getFullYear());
+    const mon = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    const hh = String(date.getHours()).padStart(2, '0');
+    const mm = String(date.getMinutes()).padStart(2, '0');
+    const ss = String(date.getSeconds()).padStart(2, '0');
+    return `${yyyy}-${mon}-${dd}_${hh}-${mm}-${ss}`;
 }
 
 function renderChecklist() {
@@ -532,13 +1132,112 @@ function applyImportedWorkspace(data) {
     workspace = Workspace.normalizeWorkspace(data);
     persist();
     loadActiveFile();
+    syncExportOptionUiFromWorkspace();
 }
 
 async function handleImportFile(file) {
     const text = await file.text();
     const parsed = tryParseJson(text);
     if (!parsed) return alert('Invalid JSON');
-    applyImportedWorkspace(parsed);
+    const importedWorkspace = toWorkspaceFromImportedPayload(parsed);
+    if (!importedWorkspace) return alert('Unsupported import format');
+    applyImportedWorkspace(importedWorkspace);
+}
+
+function toWorkspaceFromImportedPayload(payload) {
+    if (isExportPackagePayload(payload)) {
+        return buildWorkspaceFromExportPackage(payload);
+    }
+    if (isWorkspacePayload(payload)) {
+        return payload;
+    }
+    if (isScenarioPayload(payload)) {
+        return buildWorkspaceFromSingleScenario(payload);
+    }
+    return null;
+}
+
+function isWorkspacePayload(payload) {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false;
+    return Array.isArray(payload.files)
+        || Array.isArray(payload.rules)
+        || Array.isArray(payload.folders)
+        || Boolean(payload.uiState);
+}
+
+function isScenarioPayload(payload) {
+    return Boolean(payload && typeof payload === 'object' && !Array.isArray(payload) && Array.isArray(payload.steps));
+}
+
+function isExportPackagePayload(payload) {
+    return Boolean(payload
+        && typeof payload === 'object'
+        && payload.format === EXPORT_FORMAT
+        && Array.isArray(payload.files));
+}
+
+function buildWorkspaceFromSingleScenario(scenarioData) {
+    const folder = Workspace.createFolderRecord('Imported');
+    const file = Workspace.createFileRecord(folder.id, `${DEFAULT_FILE_NAME || 'scenario'}.json`, JSON.stringify(scenarioData, null, 2));
+    return {
+        version: WORKSPACE_VERSION,
+        folders: [folder],
+        files: [file],
+        uiState: {}
+    };
+}
+
+function buildWorkspaceFromExportPackage(payload) {
+    const folderByName = new Map();
+    const folders = [];
+    const files = [];
+    const entries = Array.isArray(payload.files) ? payload.files : [];
+
+    const getFolderId = (name) => {
+        const normalized = normalizeFolderName(name);
+        if (folderByName.has(normalized)) return folderByName.get(normalized).id;
+        const folder = Workspace.createFolderRecord(normalized);
+        folderByName.set(normalized, folder);
+        folders.push(folder);
+        return folder.id;
+    };
+
+    entries.forEach((entry, index) => {
+        if (!entry || typeof entry !== 'object') return;
+        const folderId = getFolderId(entry.folder);
+        const nextName = normalizeImportedFileName(entry.name, index);
+        const content = normalizeImportedFileContent(entry);
+        files.push(Workspace.createFileRecord(folderId, nextName, content));
+    });
+
+    return {
+        version: WORKSPACE_VERSION,
+        folders,
+        files,
+        uiState: {
+            exportMode: normalizeExportMode(payload.exportMode),
+            customExportFields: Array.isArray(payload.customFields) ? payload.customFields : []
+        }
+    };
+}
+
+function normalizeFolderName(value) {
+    const name = typeof value === 'string' ? value.trim() : '';
+    return name || 'Imported';
+}
+
+function normalizeImportedFileName(value, index) {
+    const name = typeof value === 'string' ? value.trim() : '';
+    if (name) return name;
+    return `scenario-${index + 1}.json`;
+}
+
+function normalizeImportedFileContent(entry) {
+    if (typeof entry.rawContent === 'string') return entry.rawContent;
+    if (Object.prototype.hasOwnProperty.call(entry, 'data')) {
+        return JSON.stringify(entry.data, null, 2);
+    }
+    return JSON.stringify(buildRequiredScenarioWithDefaults({}), null, 2);
 }
 
 function updateSaveIndicator(state) {
@@ -1056,14 +1755,7 @@ function setupEventListeners() {
         }
     });
 
-    EL.btnExport.addEventListener('click', () => {
-        const blob = new Blob([JSON.stringify(Workspace.buildWorkspaceExportPayload(workspace), null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `qa-scenarios-${new Date().getTime()}.json`;
-        a.click();
-    });
+    EL.btnExport.addEventListener('click', handleExportClick);
 
     EL.btnImport.addEventListener('click', () => {
         EL.fileInput.value = '';

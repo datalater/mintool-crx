@@ -18,9 +18,48 @@
                     <button id="btn-import" class="btn btn-secondary">
                         <span class="btn-icon">📥</span> Import
                     </button>
-                    <button id="btn-export" class="btn btn-secondary">
-                        <span class="btn-icon">📤</span> Export
-                    </button>
+                    <div id="export-split" class="export-split">
+                        <button id="btn-export" class="btn btn-secondary" type="button">
+                            <span class="btn-icon">📤</span> Export
+                        </button>
+                        <button
+                            id="btn-export-menu"
+                            class="btn btn-secondary btn-export-menu"
+                            type="button"
+                            aria-label="Export options"
+                            aria-haspopup="dialog"
+                            aria-controls="export-options-menu"
+                            aria-expanded="false"
+                            title="Export options"
+                        >
+                            •••
+                        </button>
+                        <div id="export-options-menu" class="export-options-menu" role="dialog" aria-label="Export options">
+                            <div class="export-options-group" role="radiogroup" aria-label="Export field mode">
+                                <label class="export-radio-option" for="export-mode-all">
+                                    <input id="export-mode-all" type="radio" name="export-mode" value="all">
+                                    <span>전체 필드</span>
+                                </label>
+                                <label class="export-radio-option" for="export-mode-custom">
+                                    <input id="export-mode-custom" type="radio" name="export-mode" value="custom">
+                                    <span>직접 선택하기</span>
+                                </label>
+                            </div>
+
+                            <div id="export-custom-options" class="export-custom-options is-hidden">
+                                <div class="export-custom-toolbar">
+                                    <input id="export-field-search" class="export-field-search" type="search" placeholder="필드 검색..." aria-label="Search export fields">
+                                    <div class="export-custom-actions">
+                                        <button id="btn-export-select-all" class="tree-row-action" type="button">전체 선택</button>
+                                        <button id="btn-export-clear-all" class="tree-row-action" type="button">전체 해제</button>
+                                    </div>
+                                </div>
+                                <div id="export-field-count" class="export-field-count" aria-live="polite"></div>
+                                <div id="export-field-list" class="export-field-list" role="group" aria-label="Custom export fields"></div>
+                                <div id="export-field-empty" class="export-field-empty is-hidden">검색 결과가 없습니다.</div>
+                            </div>
+                        </div>
+                    </div>
                     <input type="file" id="file-input" style="display: none;" accept=".json">
                 </div>
             </div>
