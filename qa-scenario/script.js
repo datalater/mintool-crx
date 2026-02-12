@@ -7,6 +7,7 @@ import * as UI from './modules/ui-renderer.js';
 import * as Editor from './modules/editor-manager.js';
 import { captureEditorSelectionSnapshot, restoreEditorSelectionSnapshot } from './modules/editor-caret-manager.js';
 import { createResizerLayoutManager } from './modules/resizer-layout-manager.js';
+import { buildExportPayload, buildRequiredScenarioWithDefaults, formatExportFilenameDate } from './modules/export-data-manager.js';
 
 // --- Global State Mirroring the original ---
 const EL = {
@@ -867,176 +868,18 @@ function collectFieldPaths(value, prefix, bucket) {
 
 function handleExportClick() {
     const preferences = getExportPreferences();
-    const payload = buildExportPayload(preferences);
+    const payload = buildExportPayload({
+        workspace,
+        preferences,
+        exportFormat: EXPORT_FORMAT,
+        workspaceVersion: WORKSPACE_VERSION,
+        requiredExportFields: REQUIRED_EXPORT_FIELDS,
+        exportModeCustom: EXPORT_MODE_CUSTOM,
+        nowIso,
+        parseJson: tryParseJson,
+        canonicalizeFieldPath: canonicalizeExportFieldPath
+    });
     downloadExportPayload(payload);
-}
-
-function buildExportPayload(preferences) {
-    const folderMap = new Map((workspace?.folders || []).map(folder => [folder.id, folder.name]));
-    const files = (workspace?.files || []).map((file, index) => buildExportFileRecord(file, index, folderMap, preferences));
-
-    return {
-        format: EXPORT_FORMAT,
-        version: WORKSPACE_VERSION,
-        exportedAt: nowIso(),
-        exportMode: preferences.mode,
-        requiredFields: [...REQUIRED_EXPORT_FIELDS],
-        customFields: preferences.mode === EXPORT_MODE_CUSTOM ? preferences.customFields : [],
-        files
-    };
-}
-
-function buildExportFileRecord(file, index, folderMap, preferences) {
-    const name = typeof file?.name === 'string' && file.name.trim()
-        ? file.name
-        : `scenario-${index + 1}.json`;
-    const folder = folderMap.get(file?.folderId) || 'Imported';
-    const parsed = tryParseJson(file?.content);
-    const base = { name, folder };
-
-    if (parsed === null) {
-        return {
-            ...base,
-            rawContent: file?.content || ''
-        };
-    }
-
-    return {
-        ...base,
-        data: buildScenarioDataForExport(parsed, preferences)
-    };
-}
-
-function buildScenarioDataForExport(parsed, preferences) {
-    if (preferences.mode === EXPORT_MODE_ALL) {
-        return parsed;
-    }
-
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-        return buildRequiredScenarioWithDefaults({});
-    }
-
-    const selectedPaths = preferences.mode === EXPORT_MODE_CUSTOM
-        ? [...REQUIRED_EXPORT_FIELDS, ...preferences.customFields]
-        : [...REQUIRED_EXPORT_FIELDS];
-    const selectorTree = buildFieldSelectorTree(selectedPaths);
-    const selected = selectValueByFieldTree(parsed, selectorTree);
-    return buildRequiredScenarioWithDefaults(selected);
-}
-
-function buildRequiredScenarioWithDefaults(input) {
-    const source = input && typeof input === 'object' && !Array.isArray(input) ? { ...input } : {};
-    const scenario = typeof source.scenario === 'string' && source.scenario.trim()
-        ? source.scenario
-        : 'Untitled Scenario';
-    const steps = Array.isArray(source.steps)
-        ? source.steps.map(step => buildRequiredStepWithDefaults(step))
-        : [];
-    return {
-        ...source,
-        scenario,
-        steps
-    };
-}
-
-function buildRequiredStepWithDefaults(input) {
-    const source = input && typeof input === 'object' && !Array.isArray(input) ? { ...input } : {};
-    return {
-        ...source,
-        given: toChecklistArray(source.given),
-        when: toChecklistArray(source.when),
-        then: toChecklistArray(source.then),
-        pass: source.pass === true
-    };
-}
-
-function buildFieldSelectorTree(paths) {
-    const root = createFieldSelectorNode();
-    paths.forEach((path) => {
-        const canonical = canonicalizeExportFieldPath(path);
-        if (!canonical) return;
-        const tokens = canonical.split('.').filter(Boolean);
-        appendFieldSelectorPath(root, tokens);
-    });
-    return root;
-}
-
-function createFieldSelectorNode() {
-    return {
-        includeSelf: false,
-        children: new Map()
-    };
-}
-
-function appendFieldSelectorPath(root, tokens) {
-    let current = root;
-    tokens.forEach((token, index) => {
-        if (!current.children.has(token)) {
-            current.children.set(token, createFieldSelectorNode());
-        }
-        current = current.children.get(token);
-        if (index === tokens.length - 1) {
-            current.includeSelf = true;
-        }
-    });
-}
-
-function selectValueByFieldTree(value, node) {
-    if (!node) return undefined;
-    if (Array.isArray(value)) return selectArrayByFieldTree(value, node);
-    if (!value || typeof value !== 'object') {
-        return node.includeSelf ? value : undefined;
-    }
-
-    if (node.includeSelf && node.children.size === 0) {
-        return cloneExportValue(value);
-    }
-
-    const output = {};
-    node.children.forEach((childNode, key) => {
-        const childValue = selectValueByFieldTree(value[key], childNode);
-        if (childValue !== undefined) {
-            output[key] = childValue;
-        }
-    });
-
-    if (Object.keys(output).length > 0) {
-        return output;
-    }
-
-    if (node.includeSelf) {
-        return cloneExportValue(value);
-    }
-    return undefined;
-}
-
-function selectArrayByFieldTree(value, node) {
-    if (!Array.isArray(value)) return undefined;
-
-    if (node.includeSelf && node.children.size === 0) {
-        return cloneExportValue(value);
-    }
-
-    const selectedItems = value.map(item => selectValueByFieldTree(item, node));
-
-    if (selectedItems.some(item => item !== undefined)) {
-        return selectedItems.map(item => (item === undefined ? {} : item));
-    }
-
-    if (node.includeSelf) {
-        return cloneExportValue(value);
-    }
-    return [];
-}
-
-function cloneExportValue(value) {
-    if (value === null || value === undefined) return value;
-    if (typeof value !== 'object') return value;
-    try {
-        return JSON.parse(JSON.stringify(value));
-    } catch (_) {
-        return value;
-    }
 }
 
 function downloadExportPayload(payload) {
@@ -1047,17 +890,6 @@ function downloadExportPayload(payload) {
     a.download = `qa-scenarios-${formatExportFilenameDate(new Date())}.json`;
     a.click();
     URL.revokeObjectURL(url);
-}
-
-function formatExportFilenameDate(date) {
-    if (!(date instanceof Date) || Number.isNaN(date.getTime())) return 'unknown-date';
-    const yyyy = String(date.getFullYear());
-    const mon = String(date.getMonth() + 1).padStart(2, '0');
-    const dd = String(date.getDate()).padStart(2, '0');
-    const hh = String(date.getHours()).padStart(2, '0');
-    const mm = String(date.getMinutes()).padStart(2, '0');
-    const ss = String(date.getSeconds()).padStart(2, '0');
-    return `${yyyy}-${mon}-${dd}_${hh}-${mm}-${ss}`;
 }
 
 function renderChecklist() {
