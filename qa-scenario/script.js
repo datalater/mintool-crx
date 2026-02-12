@@ -10,6 +10,7 @@ import { createResizerLayoutManager } from './modules/resizer-layout-manager.js'
 import { buildExportPayload, buildRequiredScenarioWithDefaults, formatExportFilenameDate } from './modules/export-data-manager.js';
 import { createExportMenuManager } from './modules/export-menu-manager.js';
 import { toWorkspaceFromImportedPayload as convertImportedPayloadToWorkspace } from './modules/import-workspace-converter.js';
+import { createTreeMenuManager } from './modules/tree-menu-manager.js';
 
 // --- Global State Mirroring the original ---
 const EL = {
@@ -73,6 +74,7 @@ const MIN_JSON_EDITOR_WIDTH = 280;
 let stepHighlightRange = null;
 let resizerLayout = null;
 let exportMenuManager = null;
+let treeMenuManager = null;
 
 const EXPORT_MODE_ALL = 'all';
 const EXPORT_MODE_CUSTOM = 'custom';
@@ -93,6 +95,7 @@ const REQUIRED_EXPORT_FIELDS = [
 function init() {
     setupResizerLayout();
     setupExportMenuManager();
+    setupTreeMenuManager();
     loadWorkspace();
     setupEventListeners();
     resizerLayout.setupResizing();
@@ -146,6 +149,14 @@ function setupExportMenuManager() {
         exportModeCustom: EXPORT_MODE_CUSTOM,
         exportModeRequiredLegacy: EXPORT_MODE_REQUIRED_LEGACY,
         exportModes: EXPORT_MODES
+    });
+}
+
+function setupTreeMenuManager() {
+    treeMenuManager = createTreeMenuManager({
+        btnTreeMenu: EL.btnTreeMenu,
+        treeMenu: EL.treeMenu,
+        closeExportMenu
     });
 }
 
@@ -486,40 +497,13 @@ function toggleAllFolders() {
 }
 
 function setupTreeMenu() {
-    if (!EL.btnTreeMenu || !EL.treeMenu) return;
-    EL.btnTreeMenu.addEventListener('click', (event) => {
-        event.stopPropagation();
-        toggleTreeMenu();
-    });
-    document.addEventListener('click', handleTreeMenuOutsideClick);
-    document.addEventListener('keydown', handleTreeMenuEscape);
-}
-
-function toggleTreeMenu() {
-    closeExportMenu();
-    setTreeMenuOpen(!EL.treeMenu.classList.contains('is-open'));
-}
-
-function setTreeMenuOpen(isOpen) {
-    if (!EL.treeMenu || !EL.btnTreeMenu) return;
-    EL.treeMenu.classList.toggle('is-open', isOpen);
-    EL.btnTreeMenu.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    if (!treeMenuManager) return;
+    treeMenuManager.setup();
 }
 
 function closeTreeMenu() {
-    setTreeMenuOpen(false);
-}
-
-function handleTreeMenuOutsideClick(event) {
-    if (!EL.treeMenu || !EL.btnTreeMenu) return;
-    if (EL.treeMenu.contains(event.target)) return;
-    if (EL.btnTreeMenu.contains(event.target)) return;
-    setTreeMenuOpen(false);
-}
-
-function handleTreeMenuEscape(event) {
-    if (event.key !== 'Escape') return;
-    setTreeMenuOpen(false);
+    if (!treeMenuManager) return;
+    treeMenuManager.close();
 }
 
 function setupExportMenu() {
