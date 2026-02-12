@@ -24,6 +24,7 @@ import {
     updateJsonErrorMessageView
 } from './modules/editor-view-state-manager.js';
 import { setupMainEventListeners } from './modules/event-listener-manager.js';
+import { updateFolderToggleButtonStateView, toggleAllFoldersState } from './modules/tree-folder-state-manager.js';
 
 // --- Global State Mirroring the original ---
 const EL = {
@@ -386,47 +387,19 @@ function renderTree() {
 }
 
 function updateFolderToggleButtonState() {
-    if (!EL.btnToggleFolders || !workspace) return;
-
-    const folders = Array.isArray(workspace.folders) ? workspace.folders : [];
-    if (folders.length === 0) {
-        EL.btnToggleFolders.disabled = true;
-        if (EL.fileTreePanel) {
-            EL.fileTreePanel.dataset.foldersExpanded = 'false';
-        }
-        return;
-    }
-
-    const activeFile = Workspace.getActiveFile(workspace);
-    const activeFolderId = activeFile ? activeFile.folderId : null;
-    const expandedSet = new Set(workspace.uiState?.expandedFolderIds || []);
-    if (activeFolderId) expandedSet.add(activeFolderId);
-
-    const allExpanded = folders.every(folder => expandedSet.has(folder.id));
-    EL.btnToggleFolders.disabled = false;
-    if (EL.fileTreePanel) {
-        EL.fileTreePanel.dataset.foldersExpanded = allExpanded ? 'true' : 'false';
-    }
+    updateFolderToggleButtonStateView(
+        {
+            btnToggleFolders: EL.btnToggleFolders,
+            fileTreePanel: EL.fileTreePanel
+        },
+        workspace,
+        Workspace.getActiveFile
+    );
 }
 
 function toggleAllFolders() {
-    if (!workspace || !workspace.uiState) return;
-
-    const folders = Array.isArray(workspace.folders) ? workspace.folders : [];
-    if (folders.length === 0) return;
-
-    const activeFile = Workspace.getActiveFile(workspace);
-    const activeFolderId = activeFile ? activeFile.folderId : null;
-    const expandedSet = new Set(workspace.uiState.expandedFolderIds || []);
-    if (activeFolderId) expandedSet.add(activeFolderId);
-
-    const allExpanded = folders.every(folder => expandedSet.has(folder.id));
-    if (allExpanded) {
-        workspace.uiState.expandedFolderIds = activeFolderId ? [activeFolderId] : [];
-    } else {
-        workspace.uiState.expandedFolderIds = folders.map(folder => folder.id);
-    }
-
+    const changed = toggleAllFoldersState(workspace, Workspace.getActiveFile);
+    if (!changed) return;
     persist();
 }
 
