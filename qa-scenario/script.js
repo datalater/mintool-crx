@@ -12,6 +12,7 @@ import { createExportMenuManager } from './modules/export-menu-manager.js';
 import { toWorkspaceFromImportedPayload as convertImportedPayloadToWorkspace } from './modules/import-workspace-converter.js';
 import { createTreeMenuManager } from './modules/tree-menu-manager.js';
 import { getLineColumn, getPositionFromLineColumn, findTrailingCommaPosition, normalizeErrorPosition } from './modules/text-position-utils.js';
+import { createEditorSelectionManager } from './modules/editor-selection-manager.js';
 
 // --- Global State Mirroring the original ---
 const EL = {
@@ -76,6 +77,7 @@ let stepHighlightRange = null;
 let resizerLayout = null;
 let exportMenuManager = null;
 let treeMenuManager = null;
+let editorSelectionManager = null;
 
 const EXPORT_MODE_ALL = 'all';
 const EXPORT_MODE_CUSTOM = 'custom';
@@ -97,6 +99,7 @@ function init() {
     setupResizerLayout();
     setupExportMenuManager();
     setupTreeMenuManager();
+    setupEditorSelectionManager();
     loadWorkspace();
     setupEventListeners();
     resizerLayout.setupResizing();
@@ -105,6 +108,10 @@ function init() {
     applyFileTreePreference();
     setupTreeMenu();
     setupExportMenu();
+}
+
+function setupEditorSelectionManager() {
+    editorSelectionManager = createEditorSelectionManager(EL.editing);
 }
 
 function setupResizerLayout() {
@@ -238,9 +245,9 @@ function handleEditorKeydown(event) {
     event.preventDefault();
     const isShift = event.shiftKey || event.getModifierState('Shift');
     if (isShift) {
-        unindentSelection();
+        editorSelectionManager.unindentSelection();
     } else {
-        indentSelection();
+        editorSelectionManager.indentSelection();
     }
     handleEditorInput();
 }
@@ -262,75 +269,6 @@ function runFormatAndSave() {
     } catch (e) {
         alert("Invalid JSON");
     }
-}
-
-function indentSelection() {
-    updateSelectionBlock((line) => `  ${line}`, () => 2);
-}
-
-function unindentSelection() {
-    updateSelectionBlock(removeLeadingIndent, getUnindentDelta);
-}
-
-function updateSelectionBlock(transformLine, getDelta) {
-    const info = getSelectionInfo();
-    const block = info.text.slice(info.blockStart, info.blockEnd);
-    const parts = splitLines(block);
-    const deltas = parts.lines.map((line) => getDelta(line));
-    const nextBlock = parts.lines.map(transformLine).join('\n');
-    applyBlockUpdate(info, parts.lineStarts, deltas, block, nextBlock);
-}
-
-function getSelectionInfo() {
-    const start = EL.editing.selectionStart;
-    const end = EL.editing.selectionEnd;
-    const text = EL.editing.value;
-    const blockStart = text.lastIndexOf('\n', start - 1) + 1;
-    const blockEnd = getBlockEnd(text, end);
-    return { text, start, end, blockStart, blockEnd };
-}
-
-function getBlockEnd(text, end) {
-    const lineEnd = text.indexOf('\n', end);
-    return lineEnd === -1 ? text.length : lineEnd;
-}
-
-function splitLines(block) {
-    const lines = block.split('\n');
-    const lineStarts = [0];
-    for (let i = 1; i < lines.length; i++) {
-        lineStarts.push(lineStarts[i - 1] + lines[i - 1].length + 1);
-    }
-    return { lines, lineStarts };
-}
-
-function getUnindentDelta(line) {
-    if (line.startsWith('  ')) return -2;
-    return 0;
-}
-
-function removeLeadingIndent(line) {
-    if (line.startsWith('  ')) return line.slice(2);
-    return line;
-}
-
-function applyBlockUpdate(info, lineStarts, deltas, block, nextBlock) {
-    const startInBlock = info.start - info.blockStart;
-    const endInBlock = info.end - info.blockStart;
-    const nextStart = info.blockStart + adjustIndex(startInBlock, lineStarts, deltas);
-    const nextEnd = info.blockStart + adjustIndex(endInBlock, lineStarts, deltas);
-    EL.editing.setRangeText(nextBlock, info.blockStart, info.blockEnd, 'select');
-    EL.editing.selectionStart = nextStart;
-    EL.editing.selectionEnd = nextEnd;
-}
-
-function adjustIndex(indexInBlock, lineStarts, deltas) {
-    let adjusted = indexInBlock;
-    for (let i = 0; i < lineStarts.length; i++) {
-        if (lineStarts[i] >= indexInBlock) break;
-        adjusted += deltas[i];
-    }
-    return adjusted;
 }
 
 function updateActiveFileFromEditor() {
