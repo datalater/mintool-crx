@@ -6,6 +6,7 @@ import * as Workspace from './modules/workspace-manager.js';
 import * as UI from './modules/ui-renderer.js';
 import * as Editor from './modules/editor-manager.js';
 import { captureEditorSelectionSnapshot, restoreEditorSelectionSnapshot } from './modules/editor-caret-manager.js';
+import { createResizerLayoutManager } from './modules/resizer-layout-manager.js';
 
 // --- Global State Mirroring the original ---
 const EL = {
@@ -62,16 +63,13 @@ let workspace = null;
 let autosaveTimer = null;
 let activeFileDirty = false;
 let lastTreeSelectionType = 'file';
-let manualEditorWidth = null;
-let manualFileTreeWidth = null;
 const MIN_EDITOR_WIDTH = 0;
 const DEFAULT_FILE_TREE_WIDTH = 260;
 const MIN_FILE_TREE_WIDTH = 180;
 const MIN_JSON_EDITOR_WIDTH = 280;
 let stepHighlightRange = null;
-let stopPaneResizing = () => {};
-let stopFileTreeResizing = () => {};
 let visibleExportFieldPaths = [];
+let resizerLayout = null;
 
 const EXPORT_MODE_ALL = 'all';
 const EXPORT_MODE_CUSTOM = 'custom';
@@ -91,14 +89,32 @@ const REQUIRED_EXPORT_FIELD_SET = new Set(REQUIRED_EXPORT_FIELDS);
 // --- Initialization ---
 
 function init() {
+    setupResizerLayout();
     loadWorkspace();
     setupEventListeners();
-    setupResizing();
+    resizerLayout.setupResizing();
     setupWindowListeners();
     applyLineNumberVisibility();
     applyFileTreePreference();
     setupTreeMenu();
     setupExportMenu();
+}
+
+function setupResizerLayout() {
+    resizerLayout = createResizerLayoutManager({
+        el: {
+            appContent: EL.appContent,
+            paneResizer: EL.paneResizer,
+            fileTreeResizer: EL.fileTreeResizer,
+            fileTreePanel: EL.fileTreePanel,
+            editorPane: EL.editorPane
+        },
+        isFileTreeVisible,
+        persistFileTreeWidthPreference,
+        minEditorWidth: MIN_EDITOR_WIDTH,
+        minFileTreeWidth: MIN_FILE_TREE_WIDTH,
+        minJsonEditorWidth: MIN_JSON_EDITOR_WIDTH
+    });
 }
 
 function loadWorkspace() {
@@ -1299,11 +1315,11 @@ function applyFileTreeWidthPreference() {
     if (!workspace?.uiState || !EL.fileTreePanel) return;
     const preferred = workspace.uiState.fileTreeWidth;
     if (Number.isFinite(preferred) && preferred > 0) {
-        manualFileTreeWidth = preferred;
+        resizerLayout.setManualFileTreeWidth(preferred);
     }
     if (isFileTreeVisible()) {
-        const nextWidth = manualFileTreeWidth ?? DEFAULT_FILE_TREE_WIDTH;
-        manualFileTreeWidth = applyFileTreeWidth(nextWidth, { persist: false });
+        const nextWidth = resizerLayout.getManualFileTreeWidth() ?? DEFAULT_FILE_TREE_WIDTH;
+        resizerLayout.setManualFileTreeWidth(resizerLayout.applyFileTreeWidth(nextWidth, { persist: false }));
     }
 }
 
@@ -1318,15 +1334,15 @@ function setFileTreeVisibility(shouldShow, options = {}) {
     const persist = options.persist !== false;
 
     if (!shouldShow) {
-        stopFileTreeResizing();
+        resizerLayout.stopFileTreeResizing();
     }
 
     EL.fileTreePanel.classList.toggle('is-collapsed', !shouldShow);
     EL.fileTreePanel.dataset.treeVisible = shouldShow ? 'true' : 'false';
 
     if (shouldShow) {
-        const nextWidth = manualFileTreeWidth ?? DEFAULT_FILE_TREE_WIDTH;
-        manualFileTreeWidth = applyFileTreeWidth(nextWidth, { persist: false });
+        const nextWidth = resizerLayout.getManualFileTreeWidth() ?? DEFAULT_FILE_TREE_WIDTH;
+        resizerLayout.setManualFileTreeWidth(resizerLayout.applyFileTreeWidth(nextWidth, { persist: false }));
     }
 
     closeTreeMenu();
@@ -1525,130 +1541,9 @@ function getEditorMetrics() {
     return { lineHeight, paddingTop };
 }
 
-function setupResizing() {
-    let isPaneResizing = false;
-    let resizeOriginLeft = 0;
-    let isFileTreeResizing = false;
-
-    const startPaneResizing = (event) => {
-        if (event.button !== 0) return;
-        event.preventDefault();
-        isPaneResizing = true;
-        resizeOriginLeft = EL.appContent.getBoundingClientRect().left;
-        document.body.classList.add('is-resizing');
-        EL.paneResizer.classList.add('resizing');
-    };
-
-    const stopPaneResize = () => {
-        if (!isPaneResizing) return;
-        isPaneResizing = false;
-        document.body.classList.remove('is-resizing');
-        EL.paneResizer.classList.remove('resizing');
-    };
-
-    const startFileTreeResizing = (event) => {
-        if (event.button !== 0 || !isFileTreeVisible()) return;
-        event.preventDefault();
-        isFileTreeResizing = true;
-        document.body.classList.add('is-resizing');
-        EL.fileTreeResizer.classList.add('resizing');
-    };
-
-    const stopFileTreeResize = () => {
-        if (!isFileTreeResizing) return;
-        isFileTreeResizing = false;
-        EL.fileTreeResizer.classList.remove('resizing');
-        if (Number.isFinite(manualFileTreeWidth)) {
-            persistFileTreeWidthPreference(manualFileTreeWidth);
-        }
-        if (!isPaneResizing) {
-            document.body.classList.remove('is-resizing');
-        }
-    };
-
-    stopPaneResizing = stopPaneResize;
-    stopFileTreeResizing = stopFileTreeResize;
-
-    EL.paneResizer.addEventListener('mousedown', startPaneResizing);
-    if (EL.fileTreeResizer) {
-        EL.fileTreeResizer.addEventListener('mousedown', startFileTreeResizing);
-    }
-
-    window.addEventListener('mousemove', (event) => {
-        if (isPaneResizing) {
-            const width = event.clientX - resizeOriginLeft;
-            applyEditorWidth(width);
-        }
-        if (isFileTreeResizing) {
-            const paneLeft = EL.editorPane.getBoundingClientRect().left;
-            const width = event.clientX - paneLeft;
-            applyFileTreeWidth(width, { persist: false });
-        }
-    });
-    window.addEventListener('mouseup', () => {
-        stopPaneResize();
-        stopFileTreeResize();
-    });
-    window.addEventListener('mouseleave', () => {
-        stopPaneResize();
-        stopFileTreeResize();
-    });
-}
-
-function getFileTreeWidthBounds() {
-    const editorPaneWidth = EL.editorPane.getBoundingClientRect().width;
-    const resizerWidth = getFileTreeResizerWidth();
-    const maxFileTreeWidth = Math.max(MIN_FILE_TREE_WIDTH, editorPaneWidth - MIN_JSON_EDITOR_WIDTH - resizerWidth);
-    return { min: MIN_FILE_TREE_WIDTH, max: maxFileTreeWidth };
-}
-
-function getFileTreeResizerWidth() {
-    const value = getComputedStyle(document.documentElement)
-        .getPropertyValue('--tree-resizer-width')
-        .trim();
-    const parsed = parseFloat(value);
-    if (Number.isFinite(parsed)) return parsed;
-    return EL.fileTreeResizer ? EL.fileTreeResizer.getBoundingClientRect().width : 0;
-}
-
-function applyFileTreeWidth(nextWidth, options = {}) {
-    if (!EL.fileTreePanel) return null;
-    const { persist = true } = options;
-    const bounds = getFileTreeWidthBounds();
-    const clampedWidth = Math.min(Math.max(nextWidth, bounds.min), bounds.max);
-    EL.fileTreePanel.style.flex = `0 0 ${clampedWidth}px`;
-    EL.fileTreePanel.style.width = `${clampedWidth}px`;
-    manualFileTreeWidth = clampedWidth;
-    if (persist) {
-        persistFileTreeWidthPreference(clampedWidth);
-    }
-    return clampedWidth;
-}
-
-function getEditorWidthBounds() {
-    const appWidth = EL.appContent.getBoundingClientRect().width;
-    const resizerWidth = getPaneResizerWidth();
-    const minChecklistWidth = resizerWidth;
-    const maxEditorWidth = Math.max(MIN_EDITOR_WIDTH, appWidth - minChecklistWidth - resizerWidth);
-    return { min: MIN_EDITOR_WIDTH, max: maxEditorWidth };
-}
-
-function getPaneResizerWidth() {
-    const value = getComputedStyle(document.documentElement)
-        .getPropertyValue('--pane-resizer-width')
-        .trim();
-    const parsed = parseFloat(value);
-    if (Number.isFinite(parsed)) return parsed;
-    return EL.paneResizer ? EL.paneResizer.getBoundingClientRect().width : 0;
-}
-
-function applyEditorWidth(nextWidth, options = {}) {
-    const { persist = true } = options;
-    const bounds = getEditorWidthBounds();
-    const clampedWidth = Math.min(Math.max(nextWidth, bounds.min), bounds.max);
-    EL.editorPane.style.flex = `0 0 ${clampedWidth}px`;
-    if (persist) manualEditorWidth = clampedWidth;
-    return clampedWidth;
+function handleWindowResize() {
+    const isFolded = EL.appContent.classList.contains('folded');
+    resizerLayout.handleWindowResize(isFolded);
 }
 
 function setupWindowListeners() {
@@ -1664,16 +1559,6 @@ function handleBeforeUnload() {
     if (activeFileDirty) persist();
 }
 
-function handleWindowResize() {
-    if (EL.appContent.classList.contains('folded')) return;
-    if (typeof manualEditorWidth === 'number') {
-        applyEditorWidth(manualEditorWidth, { persist: false });
-    }
-    if (typeof manualFileTreeWidth === 'number' && isFileTreeVisible()) {
-        applyFileTreeWidth(manualFileTreeWidth, { persist: false });
-    }
-}
-
 function setupEventListeners() {
     EL.editing.addEventListener('input', handleEditorInput);
     EL.editing.addEventListener('paste', handleEditorPaste);
@@ -1683,8 +1568,8 @@ function setupEventListeners() {
     EL.btnFoldEditor.addEventListener('click', () => {
         const willFold = !EL.appContent.classList.contains('folded');
         if (willFold) {
-            stopPaneResizing();
-            stopFileTreeResizing();
+            resizerLayout.stopPaneResizing();
+            resizerLayout.stopFileTreeResizing();
             EL.appContent.classList.add('folded');
             EL.editorPane.style.flex = '0 0 0px';
             EL.editorPane.style.width = '0px';
@@ -1693,16 +1578,18 @@ function setupEventListeners() {
 
         EL.appContent.classList.remove('folded');
         EL.editorPane.style.width = '';
-        if (typeof manualEditorWidth === 'number') {
-            applyEditorWidth(manualEditorWidth, { persist: false });
-            if (typeof manualFileTreeWidth === 'number' && isFileTreeVisible()) {
-                applyFileTreeWidth(manualFileTreeWidth, { persist: false });
+        const manualEditorWidth = resizerLayout.getManualEditorWidth();
+        const manualFileTreeWidth = resizerLayout.getManualFileTreeWidth();
+        if (Number.isFinite(manualEditorWidth)) {
+            resizerLayout.applyEditorWidth(manualEditorWidth, { persist: false });
+            if (Number.isFinite(manualFileTreeWidth) && isFileTreeVisible()) {
+                resizerLayout.applyFileTreeWidth(manualFileTreeWidth, { persist: false });
             }
             return;
         }
         EL.editorPane.style.flex = '';
         if (isFileTreeVisible()) {
-            applyFileTreeWidth(manualFileTreeWidth ?? DEFAULT_FILE_TREE_WIDTH, { persist: false });
+            resizerLayout.applyFileTreeWidth(manualFileTreeWidth ?? DEFAULT_FILE_TREE_WIDTH, { persist: false });
         }
     });
     
