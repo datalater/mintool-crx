@@ -495,8 +495,8 @@ body {
 }
 
 .tree-file-row.is-selected {
-    background-color: rgba(47, 129, 247, 0.18);
-    color: #c9d1d9;
+    background-color: rgba(47, 129, 247, 0.24);
+    color: #f0f6fc;
 }
 
 .tree-open-indicator {

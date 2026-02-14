@@ -5,6 +5,9 @@ export function setupMainEventListeners(config) {
         onEditorPaste,
         onEditorScroll,
         onEditorKeydown,
+        onEditorKeyup,
+        onEditorClick,
+        onEditorSelect,
         onFoldEditor,
         onFormat,
         onToggleLineNumbers,
@@ -24,6 +27,9 @@ export function setupMainEventListeners(config) {
     el.editing.addEventListener('paste', onEditorPaste);
     el.editing.addEventListener('scroll', onEditorScroll);
     el.editing.addEventListener('keydown', onEditorKeydown);
+    if (typeof onEditorKeyup === 'function') el.editing.addEventListener('keyup', onEditorKeyup);
+    if (typeof onEditorClick === 'function') el.editing.addEventListener('click', onEditorClick);
+    if (typeof onEditorSelect === 'function') el.editing.addEventListener('select', onEditorSelect);
 
     el.btnFoldEditor.addEventListener('click', onFoldEditor);
     el.btnFormat.addEventListener('click', onFormat);
@@ -38,7 +44,7 @@ export function setupMainEventListeners(config) {
     el.btnImport.addEventListener('click', onImportClick);
 
     el.fileInput.addEventListener('change', async (event) => {
-        const file = event.target.files && event.target.files[0];
+        const file = event.target.files?.[0];
         if (!file) return;
         try {
             await onImportFile(file);

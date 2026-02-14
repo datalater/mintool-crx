@@ -1,5 +1,6 @@
 import { WORKSPACE_STORAGE_KEY } from './constants/storage.js';
 import { AUTOSAVE_DELAY_MS, WORKSPACE_VERSION, DEFAULT_FILE_NAME } from './configs/workspace.js';
+import { EDITOR_CONFIG } from './configs/editor-config.js';
 import { tryParseJson } from './utils/json.js';
 import { nowTs, nowIso } from './utils/date.js';
 import * as Workspace from './modules/workspace-manager.js';
@@ -27,7 +28,15 @@ import { setupMainEventListeners } from './modules/event-listener-manager.js';
 import { updateFolderToggleButtonStateView, toggleAllFoldersState } from './modules/tree-folder-state-manager.js';
 import { buildTreeRenderOptions } from './modules/tree-actions-manager.js';
 import { createEditorHighlightManager } from './modules/editor-highlight-manager.js';
-import { isEditorSaveShortcut, isEditorUndoShortcut, isEditorRedoShortcut, runNativeEditCommand } from './modules/editor-shortcut-manager.js';
+import {
+    isEditorSaveShortcut,
+    isEditorUndoShortcut,
+    isEditorRedoShortcut,
+    isEditorCursorHistoryBackShortcut,
+    isEditorCursorHistoryForwardShortcut,
+    runNativeEditCommand
+} from './modules/editor-shortcut-manager.js';
+import { createEditorCursorHistoryManager } from './modules/editor-cursor-history-manager.js';
 
 // --- Global State Mirroring the original ---
 const EL = {
@@ -93,6 +102,7 @@ let exportMenuManager = null;
 let treeMenuManager = null;
 let editorSelectionManager = null;
 let editorHighlightManager = null;
+let editorCursorHistoryManager = null;
 
 const EXPORT_MODE_ALL = 'all';
 const EXPORT_MODE_CUSTOM = 'custom';
@@ -116,6 +126,7 @@ function init() {
     setupTreeMenuManager();
     setupEditorSelectionManager();
     setupEditorHighlightManager();
+    setupEditorCursorHistoryManager();
     loadWorkspace();
     setupEventListeners();
     resizerLayout.setupResizing();
@@ -138,6 +149,14 @@ function setupEditorHighlightManager() {
         getLineColumn,
         getEditorMetrics
     });
+}
+
+function setupEditorCursorHistoryManager() {
+    editorCursorHistoryManager = createEditorCursorHistoryManager({
+        editing: EL.editing,
+        maxEntries: EDITOR_CONFIG.cursorHistory.maxEntries
+    });
+    editorCursorHistoryManager.reset();
 }
 
 function setupResizerLayout() {
@@ -219,6 +238,7 @@ function loadActiveFile() {
     renderTree();
     updateSaveIndicator('saved');
     activeFileDirty = false;
+    editorCursorHistoryManager.reset();
 }
 
 // --- Logic ---
@@ -260,7 +280,22 @@ function handleEditorPaste() {
     setTimeout(handleEditorInput, 0);
 }
 
+function handleEditorSelectionChange() {
+    editorCursorHistoryManager.recordSelectionChange();
+}
+
 function handleEditorKeydown(event) {
+    const isCursorHistoryBack = isEditorCursorHistoryBackShortcut(event, EDITOR_CONFIG);
+    const isCursorHistoryForward = isEditorCursorHistoryForwardShortcut(event, EDITOR_CONFIG);
+    if (isCursorHistoryBack || isCursorHistoryForward) {
+        event.preventDefault();
+        const handled = isCursorHistoryForward
+            ? editorCursorHistoryManager.moveForward()
+            : editorCursorHistoryManager.moveBack();
+        if (handled) syncScroll();
+        return;
+    }
+
     if (isEditorSaveShortcut(event)) {
         event.preventDefault();
         runFormatAndSave();
@@ -715,6 +750,9 @@ function setupEventListeners() {
         onEditorPaste: handleEditorPaste,
         onEditorScroll: syncScroll,
         onEditorKeydown: handleEditorKeydown,
+        onEditorKeyup: handleEditorSelectionChange,
+        onEditorClick: handleEditorSelectionChange,
+        onEditorSelect: handleEditorSelectionChange,
         onFoldEditor: () => {
             const willFold = !EL.appContent.classList.contains('folded');
             if (willFold) {

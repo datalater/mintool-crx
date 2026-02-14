@@ -1,23 +1,24 @@
-export function isEditorSaveShortcut(event) {
-    if (!event || event.isComposing) return false;
-    const hasPrimaryModifier = event.metaKey || event.ctrlKey;
-    const isSaveKey = event.key === 's' || event.key === 'S' || event.code === 'KeyS';
-    return hasPrimaryModifier && isSaveKey && !event.shiftKey && !event.altKey;
+import { EDITOR_CONFIG } from '../configs/editor-config.js';
+
+export function isEditorSaveShortcut(event, config = EDITOR_CONFIG) {
+    return isShortcutMatch(event, config?.shortcuts?.save);
 }
 
-export function isEditorUndoShortcut(event) {
-    if (!event || event.isComposing) return false;
-    const hasPrimaryModifier = event.metaKey || event.ctrlKey;
-    const isUndoKey = event.key === 'z' || event.key === 'Z' || event.code === 'KeyZ';
-    return hasPrimaryModifier && isUndoKey && !event.shiftKey && !event.altKey;
+export function isEditorUndoShortcut(event, config = EDITOR_CONFIG) {
+    return isShortcutMatch(event, config?.shortcuts?.undo);
 }
 
-export function isEditorRedoShortcut(event) {
-    if (!event || event.isComposing) return false;
-    const hasPrimaryModifier = event.metaKey || event.ctrlKey;
-    const isShiftRedo = (event.key === 'z' || event.key === 'Z' || event.code === 'KeyZ') && event.shiftKey;
-    const isCtrlYRedo = (event.key === 'y' || event.key === 'Y' || event.code === 'KeyY') && !event.shiftKey;
-    return hasPrimaryModifier && !event.altKey && (isShiftRedo || isCtrlYRedo);
+export function isEditorRedoShortcut(event, config = EDITOR_CONFIG) {
+    return isShortcutMatch(event, config?.shortcuts?.redoByShift)
+        || isShortcutMatch(event, config?.shortcuts?.redoByCtrlY);
+}
+
+export function isEditorCursorHistoryBackShortcut(event, config = EDITOR_CONFIG) {
+    return isShortcutMatch(event, config?.shortcuts?.cursorHistoryBack);
+}
+
+export function isEditorCursorHistoryForwardShortcut(event, config = EDITOR_CONFIG) {
+    return isShortcutMatch(event, config?.shortcuts?.cursorHistoryForward);
 }
 
 export function runNativeEditCommand(documentObject, command) {
@@ -27,4 +28,20 @@ export function runNativeEditCommand(documentObject, command) {
     } catch (_) {
         return false;
     }
+}
+
+function isShortcutMatch(event, shortcut) {
+    if (!event || event.isComposing || !shortcut) return false;
+    const hasPrimaryModifier = event.metaKey || event.ctrlKey;
+
+    if (typeof shortcut.primary === 'boolean' && hasPrimaryModifier !== shortcut.primary) return false;
+    if (typeof shortcut.ctrl === 'boolean' && event.ctrlKey !== shortcut.ctrl) return false;
+    if (typeof shortcut.meta === 'boolean' && event.metaKey !== shortcut.meta) return false;
+    if (typeof shortcut.shift === 'boolean' && event.shiftKey !== shortcut.shift) return false;
+    if (typeof shortcut.alt === 'boolean' && event.altKey !== shortcut.alt) return false;
+
+    const normalizedKey = typeof event.key === 'string' ? event.key.toLowerCase() : '';
+    const hasCodeMatch = Array.isArray(shortcut.codes) && shortcut.codes.includes(event.code);
+    const hasKeyMatch = Array.isArray(shortcut.keys) && shortcut.keys.some(key => key.toLowerCase() === normalizedKey);
+    return hasCodeMatch || hasKeyMatch;
 }
