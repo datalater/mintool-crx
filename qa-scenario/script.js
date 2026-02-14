@@ -34,9 +34,15 @@ import {
     isEditorRedoShortcut,
     isEditorCursorHistoryBackShortcut,
     isEditorCursorHistoryForwardShortcut,
+    isEditorFindOpenShortcut,
+    isEditorReplaceOpenShortcut,
+    isEditorFindNextShortcut,
+    isEditorFindPreviousShortcut,
+    isEditorFindCloseShortcut,
     runNativeEditCommand
 } from './modules/editor-shortcut-manager.js';
 import { createEditorCursorHistoryManager } from './modules/editor-cursor-history-manager.js';
+import { createEditorFindReplaceManager } from './modules/editor-find-replace-manager.js';
 
 // --- Global State Mirroring the original ---
 const EL = {
@@ -51,6 +57,16 @@ const EL = {
     lineNumbers: document.getElementById('line-numbers'),
     toggleLineNumbers: document.getElementById('toggle-line-numbers'),
     editorWrapper: document.getElementById('editor-wrapper'),
+    editorFindWidget: document.getElementById('editor-find-widget'),
+    editorFindInput: document.getElementById('editor-find-input'),
+    editorFindCount: document.getElementById('editor-find-count'),
+    btnEditorFindPrev: document.getElementById('btn-editor-find-prev'),
+    btnEditorFindNext: document.getElementById('btn-editor-find-next'),
+    btnEditorFindClose: document.getElementById('btn-editor-find-close'),
+    editorReplaceRow: document.getElementById('editor-replace-row'),
+    editorReplaceInput: document.getElementById('editor-replace-input'),
+    btnEditorReplaceOne: document.getElementById('btn-editor-replace-one'),
+    btnEditorReplaceAll: document.getElementById('btn-editor-replace-all'),
     scenarioTitle: document.getElementById('scenario-title'),
     btnFormat: document.getElementById('btn-format'),
     saveIndicator: document.getElementById('save-indicator'),
@@ -103,6 +119,7 @@ let treeMenuManager = null;
 let editorSelectionManager = null;
 let editorHighlightManager = null;
 let editorCursorHistoryManager = null;
+let editorFindReplaceManager = null;
 
 const EXPORT_MODE_ALL = 'all';
 const EXPORT_MODE_CUSTOM = 'custom';
@@ -127,6 +144,7 @@ function init() {
     setupEditorSelectionManager();
     setupEditorHighlightManager();
     setupEditorCursorHistoryManager();
+    setupEditorFindReplaceManager();
     loadWorkspace();
     setupEventListeners();
     resizerLayout.setupResizing();
@@ -157,6 +175,18 @@ function setupEditorCursorHistoryManager() {
         maxEntries: EDITOR_CONFIG.cursorHistory.maxEntries
     });
     editorCursorHistoryManager.reset();
+}
+
+function setupEditorFindReplaceManager() {
+    editorFindReplaceManager = createEditorFindReplaceManager({
+        editing: EL.editing,
+        onStateChange: renderEditorFindWidget,
+        onTextMutated: () => {
+            validateAndRender();
+            updateActiveFileFromEditor();
+        }
+    });
+    renderEditorFindWidget(editorFindReplaceManager.getState());
 }
 
 function setupResizerLayout() {
@@ -239,6 +269,7 @@ function loadActiveFile() {
     updateSaveIndicator('saved');
     activeFileDirty = false;
     editorCursorHistoryManager.reset();
+    editorFindReplaceManager.syncFromEditorInput();
 }
 
 // --- Logic ---
@@ -274,6 +305,7 @@ function validateAndRender() {
 function handleEditorInput() {
     validateAndRender();
     updateActiveFileFromEditor();
+    editorFindReplaceManager.syncFromEditorInput();
 }
 
 function handleEditorPaste() {
@@ -282,9 +314,29 @@ function handleEditorPaste() {
 
 function handleEditorSelectionChange() {
     editorCursorHistoryManager.recordSelectionChange();
+    editorFindReplaceManager.syncFromEditorSelection();
 }
 
 function handleEditorKeydown(event) {
+    if (isEditorFindOpenShortcut(event, EDITOR_CONFIG)) {
+        event.preventDefault();
+        openFindWidget(false);
+        return;
+    }
+
+    if (isEditorReplaceOpenShortcut(event, EDITOR_CONFIG)) {
+        event.preventDefault();
+        openFindWidget(true);
+        return;
+    }
+
+    const findState = editorFindReplaceManager.getState();
+    if (findState.isOpen && isEditorFindCloseShortcut(event, EDITOR_CONFIG)) {
+        event.preventDefault();
+        closeFindWidget();
+        return;
+    }
+
     const isCursorHistoryBack = isEditorCursorHistoryBackShortcut(event, EDITOR_CONFIG);
     const isCursorHistoryForward = isEditorCursorHistoryForwardShortcut(event, EDITOR_CONFIG);
     if (isCursorHistoryBack || isCursorHistoryForward) {
@@ -321,6 +373,118 @@ function handleEditorKeydown(event) {
         editorSelectionManager.indentSelection();
     }
     handleEditorInput();
+}
+
+function openFindWidget(showReplace) {
+    const selectedText = getEditorSelectedText();
+    editorFindReplaceManager.open({ showReplace, seedQuery: selectedText });
+    if (EL.editorFindInput) {
+        EL.editorFindInput.focus();
+        EL.editorFindInput.select();
+    }
+}
+
+function closeFindWidget() {
+    editorFindReplaceManager.close();
+    EL.editing.focus();
+}
+
+function getEditorSelectedText() {
+    const start = EL.editing.selectionStart;
+    const end = EL.editing.selectionEnd;
+    if (start === end) return '';
+    return EL.editing.value.slice(start, end);
+}
+
+function handleFindInput() {
+    editorFindReplaceManager.setQuery(EL.editorFindInput.value);
+    editorFindReplaceManager.revealActiveMatch({ focusEditor: false });
+    syncScrollToActiveMatch();
+}
+
+function handleFindInputKeydown(event) {
+    if (isEditorFindCloseShortcut(event, EDITOR_CONFIG)) {
+        event.preventDefault();
+        closeFindWidget();
+        return;
+    }
+    if (isEditorFindPreviousShortcut(event, EDITOR_CONFIG)) {
+        event.preventDefault();
+        editorFindReplaceManager.findPrevious({ focusEditor: false });
+        syncScrollToActiveMatch();
+        return;
+    }
+    if (isEditorFindNextShortcut(event, EDITOR_CONFIG)) {
+        event.preventDefault();
+        editorFindReplaceManager.findNext({ focusEditor: false });
+        syncScrollToActiveMatch();
+    }
+}
+
+function handleReplaceInput() {
+    editorFindReplaceManager.setReplaceText(EL.editorReplaceInput.value);
+}
+
+function handleReplaceInputKeydown(event) {
+    if (isEditorFindCloseShortcut(event, EDITOR_CONFIG)) {
+        event.preventDefault();
+        closeFindWidget();
+        return;
+    }
+    if (!isEditorFindNextShortcut(event, EDITOR_CONFIG)) return;
+    event.preventDefault();
+    editorFindReplaceManager.replaceCurrent();
+    syncScrollToActiveMatch();
+}
+
+function handleFindNext() {
+    editorFindReplaceManager.findNext();
+    syncScrollToActiveMatch();
+}
+
+function handleFindPrev() {
+    editorFindReplaceManager.findPrevious();
+    syncScrollToActiveMatch();
+}
+
+function handleReplaceOne() {
+    editorFindReplaceManager.replaceCurrent();
+    syncScrollToActiveMatch();
+}
+
+function handleReplaceAll() {
+    editorFindReplaceManager.replaceAll();
+    syncScrollToActiveMatch();
+}
+
+function syncScrollToActiveMatch() {
+    const activeMatch = editorFindReplaceManager.getActiveMatch();
+    if (!activeMatch) {
+        syncScroll();
+        return;
+    }
+    scrollToLine(activeMatch.start);
+    syncScroll();
+}
+
+function renderEditorFindWidget(state) {
+    if (!EL.editorFindWidget || !EL.editorReplaceRow) return;
+    EL.editorFindWidget.classList.toggle('is-hidden', !state.isOpen);
+    EL.editorReplaceRow.classList.toggle('is-hidden', !state.showReplace);
+
+    if (EL.editorFindInput && EL.editorFindInput.value !== state.query) {
+        EL.editorFindInput.value = state.query;
+    }
+    if (EL.editorReplaceInput && EL.editorReplaceInput.value !== state.replaceText) {
+        EL.editorReplaceInput.value = state.replaceText;
+    }
+
+    if (EL.editorFindCount) {
+        const current = state.matchCount > 0 && state.activeMatchIndex >= 0
+            ? state.activeMatchIndex + 1
+            : 0;
+        EL.editorFindCount.textContent = `${current} / ${state.matchCount}`;
+    }
 }
 
 function runFormatAndSave() {
@@ -753,6 +917,15 @@ function setupEventListeners() {
         onEditorKeyup: handleEditorSelectionChange,
         onEditorClick: handleEditorSelectionChange,
         onEditorSelect: handleEditorSelectionChange,
+        onFindInput: handleFindInput,
+        onFindInputKeydown: handleFindInputKeydown,
+        onReplaceInput: handleReplaceInput,
+        onReplaceInputKeydown: handleReplaceInputKeydown,
+        onFindNext: handleFindNext,
+        onFindPrev: handleFindPrev,
+        onFindClose: closeFindWidget,
+        onReplaceOne: handleReplaceOne,
+        onReplaceAll: handleReplaceAll,
         onFoldEditor: () => {
             const willFold = !EL.appContent.classList.contains('folded');
             if (willFold) {

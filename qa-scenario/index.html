@@ -76,7 +76,7 @@
                     <h2>JSON Editor</h2>
                     <div class="editor-header-controls">
                         <div id="save-indicator" class="save-indicator is-saved" role="status" aria-live="polite">
-                            <span id="save-indicator-time" class="save-indicator-time">---- -- -- --:--:--</span>
+                            <span id="save-indicator-time" class="save-indicator-time">0000-00-00 00:00:00</span>
                             <span class="save-indicator-dot" aria-hidden="true"></span>
                             <span id="save-indicator-label">Saved</span>
                         </div>
@@ -117,13 +117,27 @@
                         <div class="tree-view" id="file-tree"></div>
                     </aside>
                     <div class="file-tree-resizer" id="file-tree-resizer" role="separator" aria-orientation="vertical" aria-label="Resize file tree"></div>
-                    <div class="editor-container">
-                        <div class="code-editor" id="editor-wrapper">
-                            <div class="line-numbers" id="line-numbers" aria-hidden="true"></div>
-                            <div id="highlight-overlay"></div>
-                            <pre id="highlighting" aria-hidden="true"><code id="highlighting-content"></code></pre>
-                            <textarea id="editing" spellcheck="false" placeholder="Paste your QA scenario JSON here..."></textarea>
-                        </div>
+                        <div class="editor-container">
+                            <div class="code-editor" id="editor-wrapper">
+                                <div id="editor-find-widget" class="editor-find-widget is-hidden" role="dialog" aria-label="Find and replace">
+                                    <div class="editor-find-row">
+                                        <input id="editor-find-input" class="editor-find-input" type="text" placeholder="Find" aria-label="Find text">
+                                        <span id="editor-find-count" class="editor-find-count" aria-live="polite">0 / 0</span>
+                                        <button id="btn-editor-find-prev" class="editor-find-btn" type="button" title="Previous match">Prev</button>
+                                        <button id="btn-editor-find-next" class="editor-find-btn" type="button" title="Next match">Next</button>
+                                        <button id="btn-editor-find-close" class="editor-find-btn" type="button" title="Close">Close</button>
+                                    </div>
+                                    <div id="editor-replace-row" class="editor-find-row editor-replace-row is-hidden">
+                                        <input id="editor-replace-input" class="editor-find-input" type="text" placeholder="Replace" aria-label="Replace text">
+                                        <button id="btn-editor-replace-one" class="editor-find-btn" type="button">Replace</button>
+                                        <button id="btn-editor-replace-all" class="editor-find-btn" type="button">Replace All</button>
+                                    </div>
+                                </div>
+                                <div class="line-numbers" id="line-numbers" aria-hidden="true"></div>
+                                <div id="highlight-overlay"></div>
+                                <pre id="highlighting" aria-hidden="true"><code id="highlighting-content"></code></pre>
+                                <textarea id="editing" spellcheck="false" placeholder="Paste your QA scenario JSON here..."></textarea>
+                            </div>
                     </div>
                 </div>
             </section>

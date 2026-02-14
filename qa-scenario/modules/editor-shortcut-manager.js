@@ -21,6 +21,27 @@ export function isEditorCursorHistoryForwardShortcut(event, config = EDITOR_CONF
     return isShortcutMatch(event, config?.shortcuts?.cursorHistoryForward);
 }
 
+export function isEditorFindOpenShortcut(event, config = EDITOR_CONFIG) {
+    return isShortcutMatch(event, config?.shortcuts?.findOpen);
+}
+
+export function isEditorReplaceOpenShortcut(event, config = EDITOR_CONFIG) {
+    return isShortcutMatch(event, config?.shortcuts?.replaceOpenMac)
+        || isShortcutMatch(event, config?.shortcuts?.replaceOpenWinLinux);
+}
+
+export function isEditorFindNextShortcut(event, config = EDITOR_CONFIG) {
+    return isShortcutMatch(event, config?.shortcuts?.findNext);
+}
+
+export function isEditorFindPreviousShortcut(event, config = EDITOR_CONFIG) {
+    return isShortcutMatch(event, config?.shortcuts?.findPrevious);
+}
+
+export function isEditorFindCloseShortcut(event, config = EDITOR_CONFIG) {
+    return isShortcutMatch(event, config?.shortcuts?.findClose);
+}
+
 export function runNativeEditCommand(documentObject, command) {
     if (!documentObject || typeof documentObject.execCommand !== 'function') return false;
     try {

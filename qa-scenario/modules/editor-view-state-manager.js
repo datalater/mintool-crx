@@ -57,7 +57,7 @@ export function updateJsonErrorMessageView(jsonErrorMessage, message) {
 
 export function formatSavedTime(value) {
     const date = value ? new Date(value) : new Date();
-    if (Number.isNaN(date.getTime())) return '---- -- -- --:--:--';
+    if (Number.isNaN(date.getTime())) return '0000-00-00 00:00:00';
     const yyyy = String(date.getFullYear());
     const mon = String(date.getMonth() + 1).padStart(2, '0');
     const dd = String(date.getDate()).padStart(2, '0');

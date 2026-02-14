@@ -41,6 +41,49 @@ export const EDITOR_CONFIG = {
             primary: true,
             shift: true,
             alt: false
+        },
+        findOpen: {
+            codes: ['KeyF'],
+            keys: ['f'],
+            primary: true,
+            shift: false,
+            alt: false
+        },
+        replaceOpenMac: {
+            codes: ['KeyF'],
+            keys: ['f'],
+            meta: true,
+            ctrl: false,
+            shift: false,
+            alt: true
+        },
+        replaceOpenWinLinux: {
+            codes: ['KeyH'],
+            keys: ['h'],
+            primary: true,
+            shift: false,
+            alt: false
+        },
+        findNext: {
+            codes: ['Enter', 'NumpadEnter'],
+            keys: ['enter'],
+            primary: false,
+            shift: false,
+            alt: false
+        },
+        findPrevious: {
+            codes: ['Enter', 'NumpadEnter'],
+            keys: ['enter'],
+            primary: false,
+            shift: true,
+            alt: false
+        },
+        findClose: {
+            codes: ['Escape'],
+            keys: ['escape'],
+            primary: false,
+            shift: false,
+            alt: false
         }
     },
     cursorHistory: {

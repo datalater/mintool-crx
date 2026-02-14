@@ -8,6 +8,15 @@ export function setupMainEventListeners(config) {
         onEditorKeyup,
         onEditorClick,
         onEditorSelect,
+        onFindInput,
+        onFindInputKeydown,
+        onReplaceInput,
+        onReplaceInputKeydown,
+        onFindNext,
+        onFindPrev,
+        onFindClose,
+        onReplaceOne,
+        onReplaceAll,
         onFoldEditor,
         onFormat,
         onToggleLineNumbers,
@@ -30,6 +39,30 @@ export function setupMainEventListeners(config) {
     if (typeof onEditorKeyup === 'function') el.editing.addEventListener('keyup', onEditorKeyup);
     if (typeof onEditorClick === 'function') el.editing.addEventListener('click', onEditorClick);
     if (typeof onEditorSelect === 'function') el.editing.addEventListener('select', onEditorSelect);
+    if (el.editorFindInput && typeof onFindInput === 'function') el.editorFindInput.addEventListener('input', onFindInput);
+    if (el.editorFindInput && typeof onFindInputKeydown === 'function') el.editorFindInput.addEventListener('keydown', onFindInputKeydown);
+    if (el.editorReplaceInput && typeof onReplaceInput === 'function') el.editorReplaceInput.addEventListener('input', onReplaceInput);
+    if (el.editorReplaceInput && typeof onReplaceInputKeydown === 'function') el.editorReplaceInput.addEventListener('keydown', onReplaceInputKeydown);
+    if (el.btnEditorFindNext && typeof onFindNext === 'function') {
+        el.btnEditorFindNext.addEventListener('mousedown', preventFocusSteal);
+        el.btnEditorFindNext.addEventListener('click', onFindNext);
+    }
+    if (el.btnEditorFindPrev && typeof onFindPrev === 'function') {
+        el.btnEditorFindPrev.addEventListener('mousedown', preventFocusSteal);
+        el.btnEditorFindPrev.addEventListener('click', onFindPrev);
+    }
+    if (el.btnEditorFindClose && typeof onFindClose === 'function') {
+        el.btnEditorFindClose.addEventListener('mousedown', preventFocusSteal);
+        el.btnEditorFindClose.addEventListener('click', onFindClose);
+    }
+    if (el.btnEditorReplaceOne && typeof onReplaceOne === 'function') {
+        el.btnEditorReplaceOne.addEventListener('mousedown', preventFocusSteal);
+        el.btnEditorReplaceOne.addEventListener('click', onReplaceOne);
+    }
+    if (el.btnEditorReplaceAll && typeof onReplaceAll === 'function') {
+        el.btnEditorReplaceAll.addEventListener('mousedown', preventFocusSteal);
+        el.btnEditorReplaceAll.addEventListener('click', onReplaceAll);
+    }
 
     el.btnFoldEditor.addEventListener('click', onFoldEditor);
     el.btnFormat.addEventListener('click', onFormat);
@@ -52,4 +85,8 @@ export function setupMainEventListeners(config) {
             onImportError(error);
         }
     });
+}
+
+function preventFocusSteal(event) {
+    event.preventDefault();
 }
