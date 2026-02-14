@@ -39,6 +39,9 @@ function buildDefaultScenarioContent(name) {
         + '        "Example: user is redirected to the dashboard"\n'
         + '      ],\n'
         + '      "pass": false\n'
+        + '    },\n'
+        + '    {\n'
+        + '      "divider": "Example divider section"\n'
         + '    }\n'
         + '  ]\n'
         + '}';

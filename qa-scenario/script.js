@@ -129,6 +129,7 @@ const EXPORT_FORMAT = 'qa-scenario-export';
 const REQUIRED_EXPORT_FIELDS = [
     'scenario',
     'steps',
+    'steps.divider',
     'steps.given',
     'steps.when',
     'steps.then',
@@ -692,7 +693,10 @@ function clearHighlightIfNoSelection() {
 function toggleAllPass() {
     if (!hasSteps(currentData)) return;
     const nextValue = !areAllStepsPassed(currentData.steps);
-    currentData.steps.forEach(step => { step.pass = nextValue; });
+    currentData.steps.forEach(step => {
+        if (UI.isChecklistDividerStep(step)) return;
+        step.pass = nextValue;
+    });
     syncToEditor();
     renderChecklist();
 }
@@ -853,11 +857,14 @@ function updateErrorMessage(message) {
 }
 
 function hasSteps(data) {
-    return Boolean(data && Array.isArray(data.steps) && data.steps.length > 0);
+    if (!data || !Array.isArray(data.steps)) return false;
+    return data.steps.some(step => !UI.isChecklistDividerStep(step));
 }
 
 function areAllStepsPassed(steps) {
-    return steps.every(step => step.pass === true);
+    const checkableSteps = steps.filter(step => !UI.isChecklistDividerStep(step));
+    if (checkableSteps.length === 0) return false;
+    return checkableSteps.every(step => step.pass === true);
 }
 
 function clearStepHighlight() {

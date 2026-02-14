@@ -99,13 +99,28 @@ function buildScenarioDataForExport(parsed, preferences, context) {
 
 function buildRequiredStepWithDefaults(input) {
     const source = input && typeof input === 'object' && !Array.isArray(input) ? { ...input } : {};
-    return {
+    const divider = normalizeDividerValue(source.divider);
+    if (divider !== null) {
+        return {
+            ...source,
+            divider
+        };
+    }
+    const normalized = {
         ...source,
         given: toChecklistArray(source.given),
         when: toChecklistArray(source.when),
-        then: toChecklistArray(source.then),
         pass: source.pass === true
     };
+    normalized['then'] = toChecklistArray(source['then']);
+    return normalized;
+}
+
+function normalizeDividerValue(value) {
+    if (value === true) return true;
+    if (typeof value !== 'string') return null;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
 }
 
 function toChecklistArray(value) {
