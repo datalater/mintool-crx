@@ -1,4 +1,9 @@
-@import url('reset.css');
+@layer reset, base, components, features, overrides;
+@import url('styles/reset-layer.css') layer(reset);
+@import url('styles/feature-export.css') layer(features);
+@import url('styles/feature-resizer.css') layer(features);
+
+@layer base {
 
 body {
     background-color: var(--bg-color);
@@ -8,17 +13,6 @@ body {
     line-height: 1.5;
     height: 100vh;
     overflow: hidden;
-}
-
-body.is-resizing {
-    cursor: col-resize;
-    user-select: none;
-}
-
-body.is-resizing .pane,
-body.is-resizing .pane-resizer,
-body.is-resizing .file-tree-resizer {
-    transition: none !important;
 }
 
 .app-container {
@@ -36,7 +30,8 @@ body.is-resizing .file-tree-resizer {
     align-items: center;
     justify-content: space-between;
     padding: 0 16px;
-    z-index: 10;
+    position: relative;
+    z-index: 40;
 }
 
 .logo {
@@ -166,48 +161,6 @@ body.is-resizing .file-tree-resizer {
     border-color: #d29922;
 }
 
-/* Main Content */
-.app-content {
-    flex: 1;
-    display: flex;
-    overflow: hidden;
-    position: relative;
-}
-
-.btn-fold-toggle {
-    position: absolute;
-    left: 10px;
-    top: 8px;
-    z-index: 50;
-    background: transparent;
-    border: 1px solid transparent;
-    color: var(--text-secondary);
-    cursor: pointer;
-    width: 28px;
-    height: 28px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
-    padding: 0;
-    border-radius: 6px;
-}
-
-.btn-fold-toggle:hover {
-    color: var(--text-primary);
-    background: var(--accent-secondary);
-    border-color: var(--border-color);
-}
-
-.fold-icon {
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    transform-origin: center;
-}
-
-.app-content.folded .btn-fold-toggle .fold-icon {
-    transform: rotate(180deg);
-}
-
 .pane {
     flex: 1;
     min-width: 0;
@@ -216,33 +169,6 @@ body.is-resizing .file-tree-resizer {
     background-color: var(--pane-bg);
     overflow: hidden;
     transition: flex-basis 0.18s ease, width 0.18s ease, opacity 0.18s ease;
-}
-
-.editor-pane,
-.checklist-pane {
-    min-width: 0;
-}
-
-.editor-pane.folded,
-.app-content.folded .editor-pane {
-    flex: 0 0 0px;
-    width: 0;
-    min-width: 0;
-    margin-right: -1px;
-}
-
-.app-content.folded .editor-pane + .pane-divider {
-    display: none;
-}
-
-.app-content.folded .editor-pane > * {
-    visibility: hidden;
-    opacity: 0;
-    pointer-events: none;
-}
-
-.app-content.folded .pane-resizer {
-    display: none;
 }
 
 .pane-header {
@@ -323,23 +249,6 @@ body.is-resizing .file-tree-resizer {
     line-height: 18px;
 }
 
-.pane-resizer {
-    width: var(--pane-resizer-width);
-    background-color: var(--bg-secondary);
-    border-left: 1px solid var(--border-color);
-    border-right: 1px solid var(--border-color);
-    cursor: col-resize;
-    touch-action: none;
-    transition: background-color 0.2s;
-    z-index: 10;
-    position: relative;
-}
-
-.pane-resizer:hover, .pane-resizer.resizing {
-    background-color: var(--accent-primary);
-    border-color: var(--accent-primary);
-}
-
 /* Workspace Tree */
 .editor-workspace {
     flex: 1;
@@ -387,36 +296,6 @@ body.is-resizing .file-tree-resizer {
     display: none;
 }
 
-.file-tree-resizer {
-    flex: 0 0 var(--tree-resizer-width);
-    width: var(--tree-resizer-width);
-    touch-action: none;
-    cursor: col-resize;
-    position: relative;
-    background: transparent;
-}
-
-.file-tree-resizer::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: 50%;
-    width: 1px;
-    background-color: var(--border-muted);
-    transform: translateX(-50%);
-    transition: background-color 120ms ease, width 120ms ease;
-}
-
-.file-tree-resizer:hover::before,
-.file-tree-resizer.resizing::before {
-    width: 2px;
-    background-color: var(--accent-primary);
-}
-
-.file-tree-panel.is-collapsed + .file-tree-resizer {
-    display: none;
-}
 
 .tree-toolbar {
     display: flex;
@@ -616,8 +495,8 @@ body.is-resizing .file-tree-resizer {
 }
 
 .tree-file-row.is-selected {
-    background-color: rgba(47, 129, 247, 0.18);
-    color: #c9d1d9;
+    background-color: rgba(47, 129, 247, 0.24);
+    color: #f0f6fc;
 }
 
 .tree-open-indicator {
@@ -799,6 +678,74 @@ body.is-resizing .file-tree-resizer {
     --editor-gutter-width: 0px;
 }
 
+.editor-find-widget {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    z-index: 4;
+    min-width: 320px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: #161b22;
+    box-shadow: 0 8px 20px rgba(1, 4, 9, 0.55);
+}
+
+.editor-find-widget.is-hidden,
+.editor-replace-row.is-hidden {
+    display: none;
+}
+
+.editor-find-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.editor-find-input {
+    flex: 1;
+    min-width: 0;
+    height: 28px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: #0d1117;
+    color: var(--text-primary);
+    padding: 0 8px;
+    font-family: var(--font-ui);
+    font-size: 12px;
+}
+
+.editor-find-input:focus {
+    outline: 1px solid var(--accent-primary);
+    border-color: var(--accent-primary);
+}
+
+.editor-find-count {
+    min-width: 44px;
+    text-align: right;
+    color: var(--text-secondary);
+    font-size: 11px;
+}
+
+.editor-find-btn {
+    height: 28px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: #21262d;
+    color: var(--text-primary);
+    padding: 0 8px;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.editor-find-btn:hover {
+    border-color: #8b949e;
+    background: #30363d;
+}
+
 .code-editor.has-line-numbers {
     --editor-gutter-width: var(--line-number-gutter);
 }
@@ -963,6 +910,25 @@ tr:hover {
 
 tr.selected-row {
     background-color: rgba(88, 166, 255, 0.1);
+}
+
+tr.checklist-divider-row {
+    background: rgba(56, 139, 253, 0.12);
+}
+
+tr.checklist-divider-row:hover {
+    background: rgba(56, 139, 253, 0.16);
+    cursor: default;
+}
+
+tr.checklist-divider-row td {
+    border-top: 1px solid rgba(56, 139, 253, 0.35);
+    border-bottom: 1px solid rgba(56, 139, 253, 0.35);
+    color: #c9d1d9;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: none;
 }
 
 .col-num { width: 40px; text-align: center; color: var(--text-secondary); }
@@ -1172,4 +1138,6 @@ tr.selected-row {
 
 ::-webkit-scrollbar-thumb:hover {
     background: var(--text-secondary);
+}
+
 }

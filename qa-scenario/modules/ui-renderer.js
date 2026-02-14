@@ -41,12 +41,30 @@ function normalizeStepFieldForEditor(value) {
     return String(value).trim();
 }
 
+export function normalizeChecklistDividerValue(value) {
+    if (value === true) return true;
+    if (typeof value !== 'string') return null;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+}
+
+export function isChecklistDividerStep(step) {
+    return normalizeChecklistDividerValue(step?.divider) !== null;
+}
+
+export function getChecklistDividerTitle(step) {
+    const normalized = normalizeChecklistDividerValue(step?.divider);
+    if (typeof normalized === 'string') return normalized;
+    return normalized === true ? 'divider' : '';
+}
+
 export function updatePassHeaderState(passHeaderToggle, currentData) {
     if (!passHeaderToggle) return;
 
     const steps = (currentData && Array.isArray(currentData.steps)) ? currentData.steps : [];
-    const hasSteps = steps.length > 0;
-    const allPassed = hasSteps && steps.every(step => step.pass === true);
+    const checkableSteps = steps.filter(step => !isChecklistDividerStep(step));
+    const hasSteps = checkableSteps.length > 0;
+    const allPassed = hasSteps && checkableSteps.every(step => step.pass === true);
 
     passHeaderToggle.classList.toggle('all-passed', allPassed);
     passHeaderToggle.classList.toggle('disabled', !hasSteps);
@@ -190,12 +208,25 @@ export function renderChecklist(container, data, options = {}) {
     }
 
     container.innerHTML = '';
+    let visibleIndex = 0;
     data.steps.forEach((step, index) => {
+        if (isChecklistDividerStep(step)) {
+            const dividerRow = document.createElement('tr');
+            dividerRow.className = 'checklist-divider-row';
+            const dividerCell = document.createElement('td');
+            dividerCell.colSpan = 5;
+            dividerCell.textContent = getChecklistDividerTitle(step);
+            dividerRow.appendChild(dividerCell);
+            container.appendChild(dividerRow);
+            return;
+        }
+
+        visibleIndex += 1;
         const tr = document.createElement('tr');
         const isPassed = step.pass === true;
         
         tr.innerHTML = `
-            <td class="col-num">${index + 1}</td>
+            <td class="col-num">${visibleIndex}</td>
             <td class="col-given"><div class="cell-content" contenteditable="true" data-index="${index}" data-field="given"></div></td>
             <td class="col-when"><div class="cell-content" contenteditable="true" data-index="${index}" data-field="when"></div></td>
             <td class="col-then"><div class="cell-content" contenteditable="true" data-index="${index}" data-field="then"></div></td>
@@ -229,7 +260,9 @@ export function renderChecklist(container, data, options = {}) {
 
         tr.addEventListener('click', () => {
             const rows = container.querySelectorAll('tr');
-            rows.forEach(r => r.classList.remove('selected-row'));
+            rows.forEach((row) => {
+                row.classList.remove('selected-row');
+            });
             tr.classList.add('selected-row');
             onHighlightStep(index);
         });

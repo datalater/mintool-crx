@@ -1,10 +1,49 @@
 import { WORKSPACE_STORAGE_KEY } from './constants/storage.js';
-import { AUTOSAVE_DELAY_MS } from './configs/workspace.js';
+import { AUTOSAVE_DELAY_MS, WORKSPACE_VERSION, DEFAULT_FILE_NAME } from './configs/workspace.js';
+import { EDITOR_CONFIG } from './configs/editor-config.js';
 import { tryParseJson } from './utils/json.js';
 import { nowTs, nowIso } from './utils/date.js';
 import * as Workspace from './modules/workspace-manager.js';
 import * as UI from './modules/ui-renderer.js';
 import * as Editor from './modules/editor-manager.js';
+import { captureEditorSelectionSnapshot, restoreEditorSelectionSnapshot } from './modules/editor-caret-manager.js';
+import { createResizerLayoutManager } from './modules/resizer-layout-manager.js';
+import { buildExportPayload, buildRequiredScenarioWithDefaults, formatExportFilenameDate } from './modules/export-data-manager.js';
+import { createExportMenuManager } from './modules/export-menu-manager.js';
+import { toWorkspaceFromImportedPayload as convertImportedPayloadToWorkspace } from './modules/import-workspace-converter.js';
+import { createTreeMenuManager } from './modules/tree-menu-manager.js';
+import { getLineColumn, getPositionFromLineColumn, findTrailingCommaPosition, normalizeErrorPosition } from './modules/text-position-utils.js';
+import { createEditorSelectionManager } from './modules/editor-selection-manager.js';
+import { resolveParseErrorPosition, formatParseErrorMessage, formatRuntimeErrorMessage, getSafeErrorMessage } from './modules/json-error-manager.js';
+import {
+    updateSaveIndicatorView,
+    applyLineNumberVisibilityView,
+    applyLineNumberPreferenceFromWorkspace,
+    updateLineNumbersView,
+    setJsonValidationValidView,
+    setJsonValidationErrorView,
+    updateJsonErrorMessageView
+} from './modules/editor-view-state-manager.js';
+import { setupMainEventListeners } from './modules/event-listener-manager.js';
+import { updateFolderToggleButtonStateView, toggleAllFoldersState } from './modules/tree-folder-state-manager.js';
+import { buildTreeRenderOptions } from './modules/tree-actions-manager.js';
+import { createEditorHighlightManager } from './modules/editor-highlight-manager.js';
+import {
+    isEditorSaveShortcut,
+    isEditorUndoShortcut,
+    isEditorRedoShortcut,
+    isEditorCursorHistoryBackShortcut,
+    isEditorCursorHistoryForwardShortcut,
+    isEditorFindOpenShortcut,
+    isEditorReplaceOpenShortcut,
+    isEditorFindNextShortcut,
+    isEditorFindPreviousShortcut,
+    isEditorFindCloseShortcut,
+    runNativeEditCommand
+} from './modules/editor-shortcut-manager.js';
+import { createEditorCursorHistoryManager } from './modules/editor-cursor-history-manager.js';
+import { createEditorFindReplaceManager } from './modules/editor-find-replace-manager.js';
+import { createDeletedFileHistoryManager } from './modules/deleted-file-history-manager.js';
 
 // --- Global State Mirroring the original ---
 const EL = {
@@ -19,6 +58,16 @@ const EL = {
     lineNumbers: document.getElementById('line-numbers'),
     toggleLineNumbers: document.getElementById('toggle-line-numbers'),
     editorWrapper: document.getElementById('editor-wrapper'),
+    editorFindWidget: document.getElementById('editor-find-widget'),
+    editorFindInput: document.getElementById('editor-find-input'),
+    editorFindCount: document.getElementById('editor-find-count'),
+    btnEditorFindPrev: document.getElementById('btn-editor-find-prev'),
+    btnEditorFindNext: document.getElementById('btn-editor-find-next'),
+    btnEditorFindClose: document.getElementById('btn-editor-find-close'),
+    editorReplaceRow: document.getElementById('editor-replace-row'),
+    editorReplaceInput: document.getElementById('editor-replace-input'),
+    btnEditorReplaceOne: document.getElementById('btn-editor-replace-one'),
+    btnEditorReplaceAll: document.getElementById('btn-editor-replace-all'),
     scenarioTitle: document.getElementById('scenario-title'),
     btnFormat: document.getElementById('btn-format'),
     saveIndicator: document.getElementById('save-indicator'),
@@ -41,6 +90,18 @@ const EL = {
     editorPane: document.getElementById('editor-pane'),
     btnImport: document.getElementById('btn-import'),
     btnExport: document.getElementById('btn-export'),
+    exportSplit: document.getElementById('export-split'),
+    btnExportMenu: document.getElementById('btn-export-menu'),
+    exportOptionsMenu: document.getElementById('export-options-menu'),
+    exportModeAll: document.getElementById('export-mode-all'),
+    exportModeCustom: document.getElementById('export-mode-custom'),
+    exportCustomOptions: document.getElementById('export-custom-options'),
+    exportFieldSearch: document.getElementById('export-field-search'),
+    btnExportSelectAll: document.getElementById('btn-export-select-all'),
+    btnExportClearAll: document.getElementById('btn-export-clear-all'),
+    exportFieldList: document.getElementById('export-field-list'),
+    exportFieldCount: document.getElementById('export-field-count'),
+    exportFieldEmpty: document.getElementById('export-field-empty'),
     fileInput: document.getElementById('file-input')
 };
 
@@ -49,26 +110,150 @@ let workspace = null;
 let autosaveTimer = null;
 let activeFileDirty = false;
 let lastTreeSelectionType = 'file';
-let manualEditorWidth = null;
-let manualFileTreeWidth = null;
 const MIN_EDITOR_WIDTH = 0;
 const DEFAULT_FILE_TREE_WIDTH = 260;
 const MIN_FILE_TREE_WIDTH = 180;
 const MIN_JSON_EDITOR_WIDTH = 280;
-let stepHighlightRange = null;
-let stopPaneResizing = () => {};
-let stopFileTreeResizing = () => {};
+let resizerLayout = null;
+let exportMenuManager = null;
+let treeMenuManager = null;
+let editorSelectionManager = null;
+let editorHighlightManager = null;
+let editorCursorHistoryManager = null;
+let editorFindReplaceManager = null;
+let deletedFileHistoryManager = null;
+
+const EXPORT_MODE_ALL = 'all';
+const EXPORT_MODE_CUSTOM = 'custom';
+const EXPORT_MODE_REQUIRED_LEGACY = 'required';
+const EXPORT_MODES = new Set([EXPORT_MODE_ALL, EXPORT_MODE_CUSTOM]);
+const EXPORT_FORMAT = 'qa-scenario-export';
+const REQUIRED_EXPORT_FIELDS = [
+    'scenario',
+    'steps',
+    'steps.divider',
+    'steps.given',
+    'steps.when',
+    'steps.then',
+    'steps.pass'
+];
 
 // --- Initialization ---
 
 function init() {
+    setupResizerLayout();
+    setupExportMenuManager();
+    setupTreeMenuManager();
+    setupEditorSelectionManager();
+    setupEditorHighlightManager();
+    setupEditorCursorHistoryManager();
+    setupEditorFindReplaceManager();
+    setupDeletedFileHistoryManager();
     loadWorkspace();
     setupEventListeners();
-    setupResizing();
+    resizerLayout.setupResizing();
     setupWindowListeners();
     applyLineNumberVisibility();
     applyFileTreePreference();
     setupTreeMenu();
+    setupExportMenu();
+}
+
+function setupEditorSelectionManager() {
+    editorSelectionManager = createEditorSelectionManager(EL.editing);
+}
+
+function setupEditorHighlightManager() {
+    editorHighlightManager = createEditorHighlightManager({
+        editing: EL.editing,
+        highlightOverlay: EL.highlightOverlay,
+        jsonErrorPosition: EL.jsonErrorPosition,
+        getLineColumn,
+        getEditorMetrics
+    });
+}
+
+function setupEditorCursorHistoryManager() {
+    editorCursorHistoryManager = createEditorCursorHistoryManager({
+        editing: EL.editing,
+        maxEntries: EDITOR_CONFIG.cursorHistory.maxEntries
+    });
+    editorCursorHistoryManager.reset();
+}
+
+function setupEditorFindReplaceManager() {
+    editorFindReplaceManager = createEditorFindReplaceManager({
+        editing: EL.editing,
+        onStateChange: renderEditorFindWidget,
+        onTextMutated: () => {
+            validateAndRender();
+            updateActiveFileFromEditor();
+        }
+    });
+    renderEditorFindWidget(editorFindReplaceManager.getState());
+}
+
+function setupDeletedFileHistoryManager() {
+    deletedFileHistoryManager = createDeletedFileHistoryManager({
+        getWorkspace: () => workspace,
+        persist,
+        loadActiveFile,
+        maxEntries: 30
+    });
+}
+
+function setupResizerLayout() {
+    resizerLayout = createResizerLayoutManager({
+        el: {
+            appContent: EL.appContent,
+            paneResizer: EL.paneResizer,
+            fileTreeResizer: EL.fileTreeResizer,
+            fileTreePanel: EL.fileTreePanel,
+            editorPane: EL.editorPane
+        },
+        isFileTreeVisible,
+        persistFileTreeWidthPreference,
+        minEditorWidth: MIN_EDITOR_WIDTH,
+        minFileTreeWidth: MIN_FILE_TREE_WIDTH,
+        minJsonEditorWidth: MIN_JSON_EDITOR_WIDTH
+    });
+}
+
+function setupExportMenuManager() {
+    exportMenuManager = createExportMenuManager({
+        el: {
+            btnExport: EL.btnExport,
+            exportSplit: EL.exportSplit,
+            btnExportMenu: EL.btnExportMenu,
+            exportOptionsMenu: EL.exportOptionsMenu,
+            exportModeAll: EL.exportModeAll,
+            exportModeCustom: EL.exportModeCustom,
+            exportCustomOptions: EL.exportCustomOptions,
+            exportFieldSearch: EL.exportFieldSearch,
+            btnExportSelectAll: EL.btnExportSelectAll,
+            btnExportClearAll: EL.btnExportClearAll,
+            exportFieldList: EL.exportFieldList,
+            exportFieldCount: EL.exportFieldCount,
+            exportFieldEmpty: EL.exportFieldEmpty
+        },
+        getWorkspace: () => workspace,
+        persistWorkspace: () => Workspace.persistWorkspace(workspace),
+        parseJson: tryParseJson,
+        closeTreeMenu,
+        requiredExportFields: REQUIRED_EXPORT_FIELDS,
+        exportModeAll: EXPORT_MODE_ALL,
+        exportModeCustom: EXPORT_MODE_CUSTOM,
+        exportModeRequiredLegacy: EXPORT_MODE_REQUIRED_LEGACY,
+        exportModes: EXPORT_MODES
+    });
+}
+
+function setupTreeMenuManager() {
+    treeMenuManager = createTreeMenuManager({
+        btnTreeMenu: EL.btnTreeMenu,
+        treeMenu: EL.treeMenu,
+        closeExportMenu
+    });
 }
 
 function loadWorkspace() {
@@ -96,6 +281,8 @@ function loadActiveFile() {
     renderTree();
     updateSaveIndicator('saved');
     activeFileDirty = false;
+    editorCursorHistoryManager.reset();
+    editorFindReplaceManager.syncFromEditorInput();
 }
 
 // --- Logic ---
@@ -131,16 +318,62 @@ function validateAndRender() {
 function handleEditorInput() {
     validateAndRender();
     updateActiveFileFromEditor();
+    editorFindReplaceManager.syncFromEditorInput();
 }
 
 function handleEditorPaste() {
     setTimeout(handleEditorInput, 0);
 }
 
+function handleEditorSelectionChange() {
+    editorCursorHistoryManager.recordSelectionChange();
+    editorFindReplaceManager.syncFromEditorSelection();
+}
+
 function handleEditorKeydown(event) {
+    if (isEditorFindOpenShortcut(event, EDITOR_CONFIG)) {
+        event.preventDefault();
+        openFindWidget(false);
+        return;
+    }
+
+    if (isEditorReplaceOpenShortcut(event, EDITOR_CONFIG)) {
+        event.preventDefault();
+        openFindWidget(true);
+        return;
+    }
+
+    const findState = editorFindReplaceManager.getState();
+    if (findState.isOpen && isEditorFindCloseShortcut(event, EDITOR_CONFIG)) {
+        event.preventDefault();
+        closeFindWidget();
+        return;
+    }
+
+    const isCursorHistoryBack = isEditorCursorHistoryBackShortcut(event, EDITOR_CONFIG);
+    const isCursorHistoryForward = isEditorCursorHistoryForwardShortcut(event, EDITOR_CONFIG);
+    if (isCursorHistoryBack || isCursorHistoryForward) {
+        event.preventDefault();
+        const handled = isCursorHistoryForward
+            ? editorCursorHistoryManager.moveForward()
+            : editorCursorHistoryManager.moveBack();
+        if (handled) syncScroll();
+        return;
+    }
+
     if (isEditorSaveShortcut(event)) {
         event.preventDefault();
         runFormatAndSave();
+        return;
+    }
+
+    if (isEditorUndoShortcut(event) || isEditorRedoShortcut(event)) {
+        event.preventDefault();
+        const command = isEditorRedoShortcut(event) ? 'redo' : 'undo';
+        const handled = runNativeEditCommand(document, command);
+        if (handled) {
+            setTimeout(handleEditorInput, 0);
+        }
         return;
     }
 
@@ -148,97 +381,135 @@ function handleEditorKeydown(event) {
     event.preventDefault();
     const isShift = event.shiftKey || event.getModifierState('Shift');
     if (isShift) {
-        unindentSelection();
+        editorSelectionManager.unindentSelection();
     } else {
-        indentSelection();
+        editorSelectionManager.indentSelection();
     }
     handleEditorInput();
 }
 
-function isEditorSaveShortcut(event) {
-    if (!event || event.isComposing) return false;
-    const hasPrimaryModifier = event.metaKey || event.ctrlKey;
-    const isSaveKey = event.key === 's' || event.key === 'S' || event.code === 'KeyS';
-    return hasPrimaryModifier && isSaveKey && !event.shiftKey && !event.altKey;
+function openFindWidget(showReplace) {
+    const selectedText = getEditorSelectedText();
+    editorFindReplaceManager.open({ showReplace, seedQuery: selectedText });
+    if (EL.editorFindInput) {
+        EL.editorFindInput.focus();
+        EL.editorFindInput.select();
+    }
+}
+
+function closeFindWidget() {
+    editorFindReplaceManager.close();
+    EL.editing.focus();
+}
+
+function getEditorSelectedText() {
+    const start = EL.editing.selectionStart;
+    const end = EL.editing.selectionEnd;
+    if (start === end) return '';
+    return EL.editing.value.slice(start, end);
+}
+
+function handleFindInput() {
+    editorFindReplaceManager.setQuery(EL.editorFindInput.value);
+    editorFindReplaceManager.revealActiveMatch({ focusEditor: false });
+    syncScrollToActiveMatch();
+}
+
+function handleFindInputKeydown(event) {
+    if (isEditorFindCloseShortcut(event, EDITOR_CONFIG)) {
+        event.preventDefault();
+        closeFindWidget();
+        return;
+    }
+    if (isEditorFindPreviousShortcut(event, EDITOR_CONFIG)) {
+        event.preventDefault();
+        editorFindReplaceManager.findPrevious({ focusEditor: false });
+        syncScrollToActiveMatch();
+        return;
+    }
+    if (isEditorFindNextShortcut(event, EDITOR_CONFIG)) {
+        event.preventDefault();
+        editorFindReplaceManager.findNext({ focusEditor: false });
+        syncScrollToActiveMatch();
+    }
+}
+
+function handleReplaceInput() {
+    editorFindReplaceManager.setReplaceText(EL.editorReplaceInput.value);
+}
+
+function handleReplaceInputKeydown(event) {
+    if (isEditorFindCloseShortcut(event, EDITOR_CONFIG)) {
+        event.preventDefault();
+        closeFindWidget();
+        return;
+    }
+    if (!isEditorFindNextShortcut(event, EDITOR_CONFIG)) return;
+    event.preventDefault();
+    editorFindReplaceManager.replaceCurrent();
+    syncScrollToActiveMatch();
+}
+
+function handleFindNext() {
+    editorFindReplaceManager.findNext();
+    syncScrollToActiveMatch();
+}
+
+function handleFindPrev() {
+    editorFindReplaceManager.findPrevious();
+    syncScrollToActiveMatch();
+}
+
+function handleReplaceOne() {
+    editorFindReplaceManager.replaceCurrent();
+    syncScrollToActiveMatch();
+}
+
+function handleReplaceAll() {
+    editorFindReplaceManager.replaceAll();
+    syncScrollToActiveMatch();
+}
+
+function syncScrollToActiveMatch() {
+    const activeMatch = editorFindReplaceManager.getActiveMatch();
+    if (!activeMatch) {
+        syncScroll();
+        return;
+    }
+    scrollToLine(activeMatch.start);
+    syncScroll();
+}
+
+function renderEditorFindWidget(state) {
+    if (!EL.editorFindWidget || !EL.editorReplaceRow) return;
+    EL.editorFindWidget.classList.toggle('is-hidden', !state.isOpen);
+    EL.editorReplaceRow.classList.toggle('is-hidden', !state.showReplace);
+
+    if (EL.editorFindInput && EL.editorFindInput.value !== state.query) {
+        EL.editorFindInput.value = state.query;
+    }
+    if (EL.editorReplaceInput && EL.editorReplaceInput.value !== state.replaceText) {
+        EL.editorReplaceInput.value = state.replaceText;
+    }
+
+    if (EL.editorFindCount) {
+        const current = state.matchCount > 0 && state.activeMatchIndex >= 0
+            ? state.activeMatchIndex + 1
+            : 0;
+        EL.editorFindCount.textContent = `${current} / ${state.matchCount}`;
+    }
 }
 
 function runFormatAndSave() {
     try {
+        const selectionSnapshot = captureEditorSelectionSnapshot(EL.editing);
         EL.editing.value = JSON.stringify(JSON.parse(EL.editing.value), null, 2);
+        restoreEditorSelectionSnapshot(EL.editing, selectionSnapshot);
         handleEditorInput();
         flushAutosaveAndPersist();
     } catch (e) {
         alert("Invalid JSON");
     }
-}
-
-function indentSelection() {
-    updateSelectionBlock((line) => `  ${line}`, () => 2);
-}
-
-function unindentSelection() {
-    updateSelectionBlock(removeLeadingIndent, getUnindentDelta);
-}
-
-function updateSelectionBlock(transformLine, getDelta) {
-    const info = getSelectionInfo();
-    const block = info.text.slice(info.blockStart, info.blockEnd);
-    const parts = splitLines(block);
-    const deltas = parts.lines.map((line) => getDelta(line));
-    const nextBlock = parts.lines.map(transformLine).join('\n');
-    applyBlockUpdate(info, parts.lineStarts, deltas, block, nextBlock);
-}
-
-function getSelectionInfo() {
-    const start = EL.editing.selectionStart;
-    const end = EL.editing.selectionEnd;
-    const text = EL.editing.value;
-    const blockStart = text.lastIndexOf('\n', start - 1) + 1;
-    const blockEnd = getBlockEnd(text, end);
-    return { text, start, end, blockStart, blockEnd };
-}
-
-function getBlockEnd(text, end) {
-    const lineEnd = text.indexOf('\n', end);
-    return lineEnd === -1 ? text.length : lineEnd;
-}
-
-function splitLines(block) {
-    const lines = block.split('\n');
-    const lineStarts = [0];
-    for (let i = 1; i < lines.length; i++) {
-        lineStarts.push(lineStarts[i - 1] + lines[i - 1].length + 1);
-    }
-    return { lines, lineStarts };
-}
-
-function getUnindentDelta(line) {
-    if (line.startsWith('  ')) return -2;
-    return 0;
-}
-
-function removeLeadingIndent(line) {
-    if (line.startsWith('  ')) return line.slice(2);
-    return line;
-}
-
-function applyBlockUpdate(info, lineStarts, deltas, block, nextBlock) {
-    const startInBlock = info.start - info.blockStart;
-    const endInBlock = info.end - info.blockStart;
-    const nextStart = info.blockStart + adjustIndex(startInBlock, lineStarts, deltas);
-    const nextEnd = info.blockStart + adjustIndex(endInBlock, lineStarts, deltas);
-    EL.editing.setRangeText(nextBlock, info.blockStart, info.blockEnd, 'select');
-    EL.editing.selectionStart = nextStart;
-    EL.editing.selectionEnd = nextEnd;
-}
-
-function adjustIndex(indexInBlock, lineStarts, deltas) {
-    let adjusted = indexInBlock;
-    for (let i = 0; i < lineStarts.length; i++) {
-        if (lineStarts[i] >= indexInBlock) break;
-        adjusted += deltas[i];
-    }
-    return adjusted;
 }
 
 function updateActiveFileFromEditor() {
@@ -265,33 +536,17 @@ function syncScroll() {
 }
 
 function parseErrorPosition(msg) {
-    const byPosition = getPositionFromMessage(msg);
-    if (byPosition !== null) return applyErrorPosition(byPosition);
-
-    const byLineColumn = getLineColumnFromMessage(msg);
-    if (byLineColumn) return applyErrorPosition(getPositionFromLineColumn(EL.editing.value, byLineColumn));
-
-    if (isUnexpectedEndError(msg)) return applyErrorPosition(EL.editing.value.length - 1);
-
-    const trailingComma = findTrailingCommaPosition(EL.editing.value);
-    if (trailingComma >= 0) return applyErrorPosition(trailingComma);
-
-    updateErrorPosition(-1);
-}
-
-function getPositionFromMessage(msg) {
-    const match = msg.match(/at position (\d+)/i);
-    return match ? parseInt(match[1], 10) : null;
-}
-
-function getLineColumnFromMessage(msg) {
-    const match = msg.match(/line\s+(\d+)\s+column\s+(\d+)/i);
-    if (!match) return null;
-    return { line: parseInt(match[1], 10), column: parseInt(match[2], 10) };
-}
-
-function isUnexpectedEndError(msg) {
-    return msg.includes('Unexpected end of JSON input');
+    const position = resolveParseErrorPosition(
+        msg,
+        EL.editing.value,
+        getPositionFromLineColumn,
+        findTrailingCommaPosition
+    );
+    if (position === null) {
+        updateErrorPosition(-1);
+        return;
+    }
+    applyErrorPosition(position);
 }
 
 function applyErrorPosition(position) {
@@ -302,143 +557,99 @@ function applyErrorPosition(position) {
 }
 
 function renderTree() {
-    UI.renderFileTree(EL.fileTree, workspace, {
-        activeFileDirty,
-        onToggleFolder: (id) => {
-            const expanded = new Set(workspace.uiState.expandedFolderIds);
-            if (expanded.has(id)) expanded.delete(id); else expanded.add(id);
-            workspace.uiState.expandedFolderIds = Array.from(expanded);
-            workspace.uiState.selectedFolderId = id;
-            workspace.uiState.selectedFileId = null;
-            workspace.uiState.lastSelectionType = 'folder';
-            lastTreeSelectionType = 'folder';
-            persist();
-        },
-        onSelectFile: (id) => {
-            workspace.uiState.activeFileId = id;
-            workspace.uiState.selectedFolderId = Workspace.getFileById(workspace, id).folderId;
-            workspace.uiState.selectedFileId = id;
-            workspace.uiState.lastSelectionType = 'file';
-            lastTreeSelectionType = 'file';
-            persist();
-            loadActiveFile();
-        },
-        onRenameFolder: (id) => {
-            const f = Workspace.getFolderById(workspace, id);
-            const n = window.prompt('Rename folder', f.name);
-            if (n) { f.name = Workspace.getNextAvailableFolderName(workspace, n, id); persist(); }
-        },
-        onDeleteFolder: (id) => {
-            workspace.folders = workspace.folders.filter(f => f.id !== id);
-            workspace.files = workspace.files.filter(f => f.folderId !== id);
-            if (workspace.uiState.selectedFolderId === id) {
-                workspace.uiState.selectedFolderId = null;
-            }
-            if (workspace.uiState.selectedFileId) {
-                const selectedFile = Workspace.getFileById(workspace, workspace.uiState.selectedFileId);
-                if (!selectedFile || selectedFile.folderId === id) {
-                    workspace.uiState.selectedFileId = null;
-                }
-            }
-            persist();
-            loadActiveFile();
-        },
-        onRenameFile: (id) => {
-            const f = Workspace.getFileById(workspace, id);
-            const n = window.prompt('Rename file', f.name);
-            if (n) { f.name = Workspace.getNextAvailableFileName(workspace, f.folderId, n, id); persist(); }
-        },
-        onDeleteFile: (id) => {
-            workspace.files = workspace.files.filter(f => f.id !== id);
-            if (workspace.uiState.selectedFileId === id) {
-                workspace.uiState.selectedFileId = null;
-            }
-            persist();
-            loadActiveFile();
+    const treeOptions = buildTreeRenderOptions({
+        getWorkspace: () => workspace,
+        getActiveFileDirty: () => activeFileDirty,
+        setLastTreeSelectionType: (nextType) => { lastTreeSelectionType = nextType; },
+        persist,
+        loadActiveFile,
+        workspaceApi: Workspace,
+        prompt: (message, defaultValue) => window.prompt(message, defaultValue),
+        onDeleteFile: (deletedFile, deletedIndex) => {
+            deletedFileHistoryManager.recordDeletedFile(deletedFile, deletedIndex);
         }
     });
+    UI.renderFileTree(EL.fileTree, workspace, treeOptions);
     updateFolderToggleButtonState();
 }
 
 function updateFolderToggleButtonState() {
-    if (!EL.btnToggleFolders || !workspace) return;
-
-    const folders = Array.isArray(workspace.folders) ? workspace.folders : [];
-    if (folders.length === 0) {
-        EL.btnToggleFolders.disabled = true;
-        if (EL.fileTreePanel) {
-            EL.fileTreePanel.dataset.foldersExpanded = 'false';
-        }
-        return;
-    }
-
-    const activeFile = Workspace.getActiveFile(workspace);
-    const activeFolderId = activeFile ? activeFile.folderId : null;
-    const expandedSet = new Set(workspace.uiState?.expandedFolderIds || []);
-    if (activeFolderId) expandedSet.add(activeFolderId);
-
-    const allExpanded = folders.every(folder => expandedSet.has(folder.id));
-    EL.btnToggleFolders.disabled = false;
-    if (EL.fileTreePanel) {
-        EL.fileTreePanel.dataset.foldersExpanded = allExpanded ? 'true' : 'false';
-    }
+    updateFolderToggleButtonStateView(
+        {
+            btnToggleFolders: EL.btnToggleFolders,
+            fileTreePanel: EL.fileTreePanel
+        },
+        workspace,
+        Workspace.getActiveFile
+    );
 }
 
 function toggleAllFolders() {
-    if (!workspace || !workspace.uiState) return;
-
-    const folders = Array.isArray(workspace.folders) ? workspace.folders : [];
-    if (folders.length === 0) return;
-
-    const activeFile = Workspace.getActiveFile(workspace);
-    const activeFolderId = activeFile ? activeFile.folderId : null;
-    const expandedSet = new Set(workspace.uiState.expandedFolderIds || []);
-    if (activeFolderId) expandedSet.add(activeFolderId);
-
-    const allExpanded = folders.every(folder => expandedSet.has(folder.id));
-    if (allExpanded) {
-        workspace.uiState.expandedFolderIds = activeFolderId ? [activeFolderId] : [];
-    } else {
-        workspace.uiState.expandedFolderIds = folders.map(folder => folder.id);
-    }
-
+    const changed = toggleAllFoldersState(workspace, Workspace.getActiveFile);
+    if (!changed) return;
     persist();
 }
 
 function setupTreeMenu() {
-    if (!EL.btnTreeMenu || !EL.treeMenu) return;
-    EL.btnTreeMenu.addEventListener('click', (event) => {
-        event.stopPropagation();
-        toggleTreeMenu();
-    });
-    document.addEventListener('click', handleTreeMenuOutsideClick);
-    document.addEventListener('keydown', handleTreeMenuEscape);
-}
-
-function toggleTreeMenu() {
-    setTreeMenuOpen(!EL.treeMenu.classList.contains('is-open'));
-}
-
-function setTreeMenuOpen(isOpen) {
-    if (!EL.treeMenu || !EL.btnTreeMenu) return;
-    EL.treeMenu.classList.toggle('is-open', isOpen);
-    EL.btnTreeMenu.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    if (!treeMenuManager) return;
+    treeMenuManager.setup();
 }
 
 function closeTreeMenu() {
-    setTreeMenuOpen(false);
+    if (!treeMenuManager) return;
+    treeMenuManager.close();
 }
 
-function handleTreeMenuOutsideClick(event) {
-    if (!EL.treeMenu || !EL.btnTreeMenu) return;
-    if (EL.treeMenu.contains(event.target)) return;
-    if (EL.btnTreeMenu.contains(event.target)) return;
-    setTreeMenuOpen(false);
+function setupExportMenu() {
+    exportMenuManager.setup();
 }
 
-function handleTreeMenuEscape(event) {
-    if (event.key !== 'Escape') return;
-    setTreeMenuOpen(false);
+function closeExportMenu() {
+    if (!exportMenuManager) return;
+    exportMenuManager.closeMenu();
+}
+
+function syncExportOptionUiFromWorkspace() {
+    if (!exportMenuManager) return;
+    exportMenuManager.syncUiFromWorkspace();
+}
+
+function getExportPreferences() {
+    return exportMenuManager.getExportPreferences();
+}
+
+function normalizeExportMode(value) {
+    return exportMenuManager.normalizeExportMode(value);
+}
+
+function canonicalizeExportFieldPath(value) {
+    return exportMenuManager.canonicalizeFieldPath(value);
+}
+
+function handleExportClick() {
+    const preferences = getExportPreferences();
+    const payload = buildExportPayload({
+        workspace,
+        preferences,
+        exportFormat: EXPORT_FORMAT,
+        workspaceVersion: WORKSPACE_VERSION,
+        requiredExportFields: REQUIRED_EXPORT_FIELDS,
+        exportModeCustom: EXPORT_MODE_CUSTOM,
+        nowIso,
+        parseJson: tryParseJson,
+        canonicalizeFieldPath: canonicalizeExportFieldPath
+    });
+    downloadExportPayload(payload);
+}
+
+function downloadExportPayload(payload) {
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `qa-scenarios-${formatExportFilenameDate(new Date())}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
 }
 
 function renderChecklist() {
@@ -497,7 +708,10 @@ function clearHighlightIfNoSelection() {
 function toggleAllPass() {
     if (!hasSteps(currentData)) return;
     const nextValue = !areAllStepsPassed(currentData.steps);
-    currentData.steps.forEach(step => { step.pass = nextValue; });
+    currentData.steps.forEach(step => {
+        if (UI.isChecklistDividerStep(step)) return;
+        step.pass = nextValue;
+    });
     syncToEditor();
     renderChecklist();
 }
@@ -532,53 +746,45 @@ function applyImportedWorkspace(data) {
     workspace = Workspace.normalizeWorkspace(data);
     persist();
     loadActiveFile();
+    syncExportOptionUiFromWorkspace();
 }
 
 async function handleImportFile(file) {
     const text = await file.text();
     const parsed = tryParseJson(text);
     if (!parsed) return alert('Invalid JSON');
-    applyImportedWorkspace(parsed);
+    const importedWorkspace = convertImportedPayloadToWorkspace(parsed, {
+        exportFormat: EXPORT_FORMAT,
+        workspaceVersion: WORKSPACE_VERSION,
+        defaultFileName: DEFAULT_FILE_NAME,
+        createFolderRecord: Workspace.createFolderRecord,
+        createFileRecord: Workspace.createFileRecord,
+        normalizeExportMode,
+        buildRequiredScenarioWithDefaults
+    });
+    if (!importedWorkspace) return alert('Unsupported import format');
+    applyImportedWorkspace(importedWorkspace);
 }
 
 function updateSaveIndicator(state) {
-    EL.saveIndicator.classList.remove('is-dirty', 'is-saving', 'is-saved');
-    EL.saveIndicator.classList.add(`is-${state}`);
-    if (state === 'saved') {
-        updateLastSavedTime(workspace?.updatedAt);
-    } else if (state === 'dirty' && EL.saveIndicatorTime) {
-        EL.saveIndicatorTime.textContent = '';
-    }
-    EL.saveIndicatorLabel.textContent = state === 'dirty' ? 'Unsaved' : (state === 'saving' ? 'Saving...' : 'Saved');
-}
-
-function updateLastSavedTime(value) {
-    if (!EL.saveIndicatorTime) return;
-    EL.saveIndicatorTime.textContent = formatSavedTime(value);
-}
-
-function formatSavedTime(value) {
-    const date = value ? new Date(value) : new Date();
-    if (Number.isNaN(date.getTime())) return '---- -- -- --:--:--';
-    const yyyy = String(date.getFullYear());
-    const mon = String(date.getMonth() + 1).padStart(2, '0');
-    const dd = String(date.getDate()).padStart(2, '0');
-    const hh = String(date.getHours()).padStart(2, '0');
-    const mm = String(date.getMinutes()).padStart(2, '0');
-    const ss = String(date.getSeconds()).padStart(2, '0');
-    return `${yyyy}-${mon}-${dd} ${hh}:${mm}:${ss}`;
+    updateSaveIndicatorView({
+        saveIndicator: EL.saveIndicator,
+        saveIndicatorTime: EL.saveIndicatorTime,
+        saveIndicatorLabel: EL.saveIndicatorLabel
+    }, state, workspace?.updatedAt);
 }
 
 function applyLineNumberVisibility() {
-    const shouldShow = EL.toggleLineNumbers.checked;
-    EL.editorWrapper.classList.toggle('has-line-numbers', shouldShow);
-    if (shouldShow) updateLineNumbers();
-    persistLineNumberPreference(shouldShow);
+    applyLineNumberVisibilityView({
+        toggleLineNumbers: EL.toggleLineNumbers,
+        editorWrapper: EL.editorWrapper,
+        editing: EL.editing,
+        lineNumbers: EL.lineNumbers
+    }, persistLineNumberPreference);
 }
 
 function applyLineNumberPreference() {
-    if (!workspace?.uiState) return;
-    EL.toggleLineNumbers.checked = workspace.uiState.showLineNumbers !== false;
+    applyLineNumberPreferenceFromWorkspace(workspace, EL.toggleLineNumbers);
 }
 
 function persistLineNumberPreference(shouldShow) {
@@ -597,11 +803,11 @@ function applyFileTreeWidthPreference() {
     if (!workspace?.uiState || !EL.fileTreePanel) return;
     const preferred = workspace.uiState.fileTreeWidth;
     if (Number.isFinite(preferred) && preferred > 0) {
-        manualFileTreeWidth = preferred;
+        resizerLayout.setManualFileTreeWidth(preferred);
     }
     if (isFileTreeVisible()) {
-        const nextWidth = manualFileTreeWidth ?? DEFAULT_FILE_TREE_WIDTH;
-        manualFileTreeWidth = applyFileTreeWidth(nextWidth, { persist: false });
+        const nextWidth = resizerLayout.getManualFileTreeWidth() ?? DEFAULT_FILE_TREE_WIDTH;
+        resizerLayout.setManualFileTreeWidth(resizerLayout.applyFileTreeWidth(nextWidth, { persist: false }));
     }
 }
 
@@ -616,15 +822,15 @@ function setFileTreeVisibility(shouldShow, options = {}) {
     const persist = options.persist !== false;
 
     if (!shouldShow) {
-        stopFileTreeResizing();
+        resizerLayout.stopFileTreeResizing();
     }
 
     EL.fileTreePanel.classList.toggle('is-collapsed', !shouldShow);
     EL.fileTreePanel.dataset.treeVisible = shouldShow ? 'true' : 'false';
 
     if (shouldShow) {
-        const nextWidth = manualFileTreeWidth ?? DEFAULT_FILE_TREE_WIDTH;
-        manualFileTreeWidth = applyFileTreeWidth(nextWidth, { persist: false });
+        const nextWidth = resizerLayout.getManualFileTreeWidth() ?? DEFAULT_FILE_TREE_WIDTH;
+        resizerLayout.setManualFileTreeWidth(resizerLayout.applyFileTreeWidth(nextWidth, { persist: false }));
     }
 
     closeTreeMenu();
@@ -639,9 +845,7 @@ function isFileTreeVisible() {
 }
 
 function updateLineNumbers() {
-    const lineCount = Math.max(1, EL.editing.value.split('\n').length);
-    const lines = Array.from({ length: lineCount }, (_, i) => i + 1);
-    EL.lineNumbers.textContent = lines.join('\n');
+    updateLineNumbersView(EL.editing, EL.lineNumbers);
 }
 
 function renderEditorFromCurrentData() {
@@ -652,166 +856,50 @@ function renderEditorFromCurrentData() {
 }
 
 function setJsonValidationValidState() {
-    EL.jsonStatus.textContent = "Valid";
-    EL.jsonStatus.classList.remove('error');
-    updateErrorPosition(-1);
-    updateErrorMessage('');
+    setJsonValidationValidView(
+        EL.jsonStatus,
+        () => updateErrorPosition(-1),
+        updateErrorMessage
+    );
 }
 
 function setJsonValidationErrorState(label) {
-    EL.jsonStatus.textContent = label;
-    EL.jsonStatus.classList.add('error');
+    setJsonValidationErrorView(EL.jsonStatus, label);
 }
 
 function updateErrorMessage(message) {
-    if (!EL.jsonErrorMessage) return;
-    const normalized = String(message || '').trim();
-    EL.jsonErrorMessage.textContent = normalized;
-    EL.jsonErrorMessage.title = normalized;
-    EL.jsonErrorMessage.classList.toggle('is-hidden', !normalized);
-}
-
-function formatParseErrorMessage(error) {
-    return `JSON parse error: ${getSafeErrorMessage(error)}`;
-}
-
-function formatRuntimeErrorMessage(error) {
-    const name = error && error.name ? error.name : 'Error';
-    return `Render error (${name}): ${getSafeErrorMessage(error)}`;
-}
-
-function getSafeErrorMessage(error) {
-    if (error && typeof error.message === 'string' && error.message.trim()) {
-        return error.message.trim();
-    }
-    return String(error || 'Unknown error').trim();
+    updateJsonErrorMessageView(EL.jsonErrorMessage, message);
 }
 
 function hasSteps(data) {
-    return Boolean(data && Array.isArray(data.steps) && data.steps.length > 0);
+    if (!data || !Array.isArray(data.steps)) return false;
+    return data.steps.some(step => !UI.isChecklistDividerStep(step));
 }
 
 function areAllStepsPassed(steps) {
-    return steps.every(step => step.pass === true);
+    const checkableSteps = steps.filter(step => !UI.isChecklistDividerStep(step));
+    if (checkableSteps.length === 0) return false;
+    return checkableSteps.every(step => step.pass === true);
 }
 
 function clearStepHighlight() {
-    stepHighlightRange = null;
-    EL.highlightOverlay.innerHTML = '';
+    editorHighlightManager.clearStepHighlight();
 }
 
 function renderStepHighlight(bounds) {
-    stepHighlightRange = getLineRange(EL.editing.value, bounds.start, bounds.end);
-    EL.highlightOverlay.innerHTML = '<div class="highlight-block"></div>';
-    updateStepHighlightPosition();
+    editorHighlightManager.renderStepHighlight(bounds);
 }
 
 function updateStepHighlightPosition() {
-    if (!stepHighlightRange) return;
-    const block = EL.highlightOverlay.firstElementChild;
-    if (!block) return;
-
-    const metrics = getEditorMetrics();
-    const height = Math.max(1, stepHighlightRange.endLine - stepHighlightRange.startLine + 1) * metrics.lineHeight;
-    const top = metrics.paddingTop + (stepHighlightRange.startLine - 1) * metrics.lineHeight - EL.editing.scrollTop;
-
-    block.style.top = `${top}px`;
-    block.style.height = `${height}px`;
-}
-
-function getLineRange(text, start, end) {
-    const startLoc = getLineColumn(text, start);
-    const endLoc = getLineColumn(text, end);
-    return { startLine: startLoc.line, endLine: endLoc.line };
+    editorHighlightManager.updateStepHighlightPosition();
 }
 
 function scrollToLine(position) {
-    const line = getLineColumn(EL.editing.value, position).line;
-    const metrics = getEditorMetrics();
-    const targetTop = metrics.paddingTop + (line - 1) * metrics.lineHeight;
-    EL.editing.scrollTop = Math.max(0, targetTop - (EL.editing.clientHeight / 3));
-    updateStepHighlightPosition();
+    editorHighlightManager.scrollToLine(position);
 }
 
 function updateErrorPosition(position) {
-    if (!Number.isFinite(position) || position < 0) {
-        EL.jsonErrorPosition.textContent = '';
-        EL.jsonErrorPosition.classList.add('is-hidden');
-        return;
-    }
-
-    const location = getLineColumn(EL.editing.value, position);
-    EL.jsonErrorPosition.textContent = `Line ${location.line}, Col ${location.column}`;
-    EL.jsonErrorPosition.classList.remove('is-hidden');
-}
-
-function getLineColumn(text, position) {
-    const clamped = Math.max(0, Math.min(position, text.length));
-    let line = 1;
-    let column = 1;
-
-    for (let i = 0; i < clamped; i++) {
-        if (text[i] === '\n') {
-            line += 1;
-            column = 1;
-        } else {
-            column += 1;
-        }
-    }
-
-    return { line, column };
-}
-
-function getPositionFromLineColumn(text, location) {
-    if (!location || location.line < 1 || location.column < 1) return -1;
-    let line = 1;
-    let index = 0;
-
-    while (index < text.length && line < location.line) {
-        if (text[index] === '\n') line += 1;
-        index += 1;
-    }
-
-    const position = index + location.column - 1;
-    return normalizeErrorPosition(text, position);
-}
-
-function findTrailingCommaPosition(text) {
-    let inString = false;
-    let escaped = false;
-
-    for (let i = 0; i < text.length - 1; i++) {
-        const char = text[i];
-        if (escaped) {
-            escaped = false;
-            continue;
-        }
-        if (char === '\\' && inString) {
-            escaped = true;
-            continue;
-        }
-        if (char === '"') {
-            inString = !inString;
-            continue;
-        }
-        if (inString || char !== ',') continue;
-        const next = findNextNonWhitespace(text, i + 1);
-        if (next !== -1 && (text[next] === ']' || text[next] === '}')) return i;
-    }
-
-    return -1;
-}
-
-function findNextNonWhitespace(text, start) {
-    for (let i = start; i < text.length; i++) {
-        if (!/\s/.test(text[i])) return i;
-    }
-    return -1;
-}
-
-function normalizeErrorPosition(text, position) {
-    if (!Number.isFinite(position) || text.length === 0) return -1;
-    return Math.min(Math.max(position, 0), text.length - 1);
+    editorHighlightManager.updateErrorPosition(position);
 }
 
 function getEditorMetrics() {
@@ -823,130 +911,9 @@ function getEditorMetrics() {
     return { lineHeight, paddingTop };
 }
 
-function setupResizing() {
-    let isPaneResizing = false;
-    let resizeOriginLeft = 0;
-    let isFileTreeResizing = false;
-
-    const startPaneResizing = (event) => {
-        if (event.button !== 0) return;
-        event.preventDefault();
-        isPaneResizing = true;
-        resizeOriginLeft = EL.appContent.getBoundingClientRect().left;
-        document.body.classList.add('is-resizing');
-        EL.paneResizer.classList.add('resizing');
-    };
-
-    const stopPaneResize = () => {
-        if (!isPaneResizing) return;
-        isPaneResizing = false;
-        document.body.classList.remove('is-resizing');
-        EL.paneResizer.classList.remove('resizing');
-    };
-
-    const startFileTreeResizing = (event) => {
-        if (event.button !== 0 || !isFileTreeVisible()) return;
-        event.preventDefault();
-        isFileTreeResizing = true;
-        document.body.classList.add('is-resizing');
-        EL.fileTreeResizer.classList.add('resizing');
-    };
-
-    const stopFileTreeResize = () => {
-        if (!isFileTreeResizing) return;
-        isFileTreeResizing = false;
-        EL.fileTreeResizer.classList.remove('resizing');
-        if (Number.isFinite(manualFileTreeWidth)) {
-            persistFileTreeWidthPreference(manualFileTreeWidth);
-        }
-        if (!isPaneResizing) {
-            document.body.classList.remove('is-resizing');
-        }
-    };
-
-    stopPaneResizing = stopPaneResize;
-    stopFileTreeResizing = stopFileTreeResize;
-
-    EL.paneResizer.addEventListener('mousedown', startPaneResizing);
-    if (EL.fileTreeResizer) {
-        EL.fileTreeResizer.addEventListener('mousedown', startFileTreeResizing);
-    }
-
-    window.addEventListener('mousemove', (event) => {
-        if (isPaneResizing) {
-            const width = event.clientX - resizeOriginLeft;
-            applyEditorWidth(width);
-        }
-        if (isFileTreeResizing) {
-            const paneLeft = EL.editorPane.getBoundingClientRect().left;
-            const width = event.clientX - paneLeft;
-            applyFileTreeWidth(width, { persist: false });
-        }
-    });
-    window.addEventListener('mouseup', () => {
-        stopPaneResize();
-        stopFileTreeResize();
-    });
-    window.addEventListener('mouseleave', () => {
-        stopPaneResize();
-        stopFileTreeResize();
-    });
-}
-
-function getFileTreeWidthBounds() {
-    const editorPaneWidth = EL.editorPane.getBoundingClientRect().width;
-    const resizerWidth = getFileTreeResizerWidth();
-    const maxFileTreeWidth = Math.max(MIN_FILE_TREE_WIDTH, editorPaneWidth - MIN_JSON_EDITOR_WIDTH - resizerWidth);
-    return { min: MIN_FILE_TREE_WIDTH, max: maxFileTreeWidth };
-}
-
-function getFileTreeResizerWidth() {
-    const value = getComputedStyle(document.documentElement)
-        .getPropertyValue('--tree-resizer-width')
-        .trim();
-    const parsed = parseFloat(value);
-    if (Number.isFinite(parsed)) return parsed;
-    return EL.fileTreeResizer ? EL.fileTreeResizer.getBoundingClientRect().width : 0;
-}
-
-function applyFileTreeWidth(nextWidth, options = {}) {
-    if (!EL.fileTreePanel) return null;
-    const { persist = true } = options;
-    const bounds = getFileTreeWidthBounds();
-    const clampedWidth = Math.min(Math.max(nextWidth, bounds.min), bounds.max);
-    EL.fileTreePanel.style.flex = `0 0 ${clampedWidth}px`;
-    EL.fileTreePanel.style.width = `${clampedWidth}px`;
-    manualFileTreeWidth = clampedWidth;
-    if (persist) {
-        persistFileTreeWidthPreference(clampedWidth);
-    }
-    return clampedWidth;
-}
-
-function getEditorWidthBounds() {
-    const appWidth = EL.appContent.getBoundingClientRect().width;
-    const resizerWidth = getPaneResizerWidth();
-    const minChecklistWidth = resizerWidth;
-    const maxEditorWidth = Math.max(MIN_EDITOR_WIDTH, appWidth - minChecklistWidth - resizerWidth);
-    return { min: MIN_EDITOR_WIDTH, max: maxEditorWidth };
-}
-
-function getPaneResizerWidth() {
-    const value = getComputedStyle(document.documentElement)
-        .getPropertyValue('--pane-resizer-width')
-        .trim();
-    const parsed = parseFloat(value);
-    if (Number.isFinite(parsed)) return parsed;
-    return EL.paneResizer ? EL.paneResizer.getBoundingClientRect().width : 0;
-}
-
-function applyEditorWidth(nextWidth, options = {}) {
-    const { persist = true } = options;
-    const bounds = getEditorWidthBounds();
-    const clampedWidth = Math.min(Math.max(nextWidth, bounds.min), bounds.max);
-    EL.editorPane.style.flex = `0 0 ${clampedWidth}px`;
-    if (persist) manualEditorWidth = clampedWidth;
-    return clampedWidth;
+function handleWindowResize() {
+    const isFolded = EL.appContent.classList.contains('folded');
+    resizerLayout.handleWindowResize(isFolded);
 }
 
 function setupWindowListeners() {
@@ -962,123 +929,122 @@ function handleBeforeUnload() {
     if (activeFileDirty) persist();
 }
 
-function handleWindowResize() {
-    if (EL.appContent.classList.contains('folded')) return;
-    if (typeof manualEditorWidth === 'number') {
-        applyEditorWidth(manualEditorWidth, { persist: false });
-    }
-    if (typeof manualFileTreeWidth === 'number' && isFileTreeVisible()) {
-        applyFileTreeWidth(manualFileTreeWidth, { persist: false });
-    }
-}
-
 function setupEventListeners() {
-    EL.editing.addEventListener('input', handleEditorInput);
-    EL.editing.addEventListener('paste', handleEditorPaste);
-    EL.editing.addEventListener('scroll', syncScroll);
-    EL.editing.addEventListener('keydown', handleEditorKeydown);
-
-    EL.btnFoldEditor.addEventListener('click', () => {
-        const willFold = !EL.appContent.classList.contains('folded');
-        if (willFold) {
-            stopPaneResizing();
-            stopFileTreeResizing();
-            EL.appContent.classList.add('folded');
-            EL.editorPane.style.flex = '0 0 0px';
-            EL.editorPane.style.width = '0px';
-            return;
-        }
-
-        EL.appContent.classList.remove('folded');
-        EL.editorPane.style.width = '';
-        if (typeof manualEditorWidth === 'number') {
-            applyEditorWidth(manualEditorWidth, { persist: false });
-            if (typeof manualFileTreeWidth === 'number' && isFileTreeVisible()) {
-                applyFileTreeWidth(manualFileTreeWidth, { persist: false });
+    setupMainEventListeners({
+        el: EL,
+        onDocumentKeydown: handleDocumentKeydown,
+        onEditorInput: handleEditorInput,
+        onEditorPaste: handleEditorPaste,
+        onEditorScroll: syncScroll,
+        onEditorKeydown: handleEditorKeydown,
+        onEditorKeyup: handleEditorSelectionChange,
+        onEditorClick: handleEditorSelectionChange,
+        onEditorSelect: handleEditorSelectionChange,
+        onFindInput: handleFindInput,
+        onFindInputKeydown: handleFindInputKeydown,
+        onReplaceInput: handleReplaceInput,
+        onReplaceInputKeydown: handleReplaceInputKeydown,
+        onFindNext: handleFindNext,
+        onFindPrev: handleFindPrev,
+        onFindClose: closeFindWidget,
+        onReplaceOne: handleReplaceOne,
+        onReplaceAll: handleReplaceAll,
+        onFoldEditor: () => {
+            const willFold = !EL.appContent.classList.contains('folded');
+            if (willFold) {
+                resizerLayout.stopPaneResizing();
+                resizerLayout.stopFileTreeResizing();
+                EL.appContent.classList.add('folded');
+                EL.editorPane.style.flex = '0 0 0px';
+                EL.editorPane.style.width = '0px';
+                return;
             }
-            return;
-        }
-        EL.editorPane.style.flex = '';
-        if (isFileTreeVisible()) {
-            applyFileTreeWidth(manualFileTreeWidth ?? DEFAULT_FILE_TREE_WIDTH, { persist: false });
-        }
-    });
-    
-    EL.btnFormat.addEventListener('click', runFormatAndSave);
 
-    EL.toggleLineNumbers.addEventListener('change', applyLineNumberVisibility);
+            EL.appContent.classList.remove('folded');
+            EL.editorPane.style.width = '';
+            const manualEditorWidth = resizerLayout.getManualEditorWidth();
+            const manualFileTreeWidth = resizerLayout.getManualFileTreeWidth();
+            if (Number.isFinite(manualEditorWidth)) {
+                resizerLayout.applyEditorWidth(manualEditorWidth, { persist: false });
+                if (Number.isFinite(manualFileTreeWidth) && isFileTreeVisible()) {
+                    resizerLayout.applyFileTreeWidth(manualFileTreeWidth, { persist: false });
+                }
+                return;
+            }
 
-    EL.btnToggleFolders.addEventListener('click', () => {
-        toggleAllFolders();
-        closeTreeMenu();
-    });
-
-    EL.btnToggleTree.addEventListener('click', () => {
-        const isCollapsed = EL.fileTreePanel?.classList.contains('is-collapsed');
-        setFileTreeVisibility(Boolean(isCollapsed));
-        closeTreeMenu();
-    });
-
-    EL.btnShowTree.addEventListener('click', () => {
-        setFileTreeVisibility(true);
-    });
-
-    EL.passHeaderToggle.addEventListener('click', () => {
-        if (EL.passHeaderToggle.classList.contains('disabled')) return;
-        toggleAllPass();
-    });
-
-    EL.btnNewFolder.addEventListener('click', () => {
-        const n = window.prompt('Folder name', 'new-folder');
-        if (n) {
-            const f = Workspace.createFolderRecord(n);
-            workspace.folders.push(f);
+            EL.editorPane.style.flex = '';
+            if (isFileTreeVisible()) {
+                resizerLayout.applyFileTreeWidth(manualFileTreeWidth ?? DEFAULT_FILE_TREE_WIDTH, { persist: false });
+            }
+        },
+        onFormat: runFormatAndSave,
+        onToggleLineNumbers: applyLineNumberVisibility,
+        onToggleFolders: () => {
+            toggleAllFolders();
+            closeTreeMenu();
+        },
+        onToggleTree: () => {
+            const isCollapsed = EL.fileTreePanel?.classList.contains('is-collapsed');
+            setFileTreeVisibility(Boolean(isCollapsed));
+            closeTreeMenu();
+        },
+        onShowTree: () => {
+            setFileTreeVisibility(true);
+        },
+        onTogglePassHeader: () => {
+            if (EL.passHeaderToggle.classList.contains('disabled')) return;
+            toggleAllPass();
+        },
+        onNewFolder: () => {
+            const name = window.prompt('Folder name', 'new-folder');
+            if (!name) return;
+            const folder = Workspace.createFolderRecord(name);
+            workspace.folders.push(folder);
             persist();
-        }
-    });
-
-    EL.btnNewFile.addEventListener('click', () => {
-        const fId = workspace.uiState.selectedFolderId || workspace.folders[0].id;
-        const defaultName = Workspace.getNextAvailableFileName(workspace, fId, 'scenario.json');
-        const n = window.prompt('File name', defaultName);
-        const trimmedName = n ? n.trim() : '';
-        if (trimmedName) {
-            const nextName = Workspace.getNextAvailableFileName(workspace, fId, trimmedName);
-            const f = Workspace.createFileRecord(fId, nextName);
-            workspace.files.push(f);
-            workspace.uiState.activeFileId = f.id;
-            workspace.uiState.selectedFolderId = fId;
-            workspace.uiState.selectedFileId = f.id;
+        },
+        onNewFile: () => {
+            const folderId = workspace.uiState.selectedFolderId || workspace.folders[0].id;
+            const defaultName = Workspace.getNextAvailableFileName(workspace, folderId, 'scenario.json');
+            const name = window.prompt('File name', defaultName);
+            const trimmedName = name ? name.trim() : '';
+            if (!trimmedName) return;
+            const nextName = Workspace.getNextAvailableFileName(workspace, folderId, trimmedName);
+            const file = Workspace.createFileRecord(folderId, nextName);
+            workspace.files.push(file);
+            workspace.uiState.activeFileId = file.id;
+            workspace.uiState.selectedFolderId = folderId;
+            workspace.uiState.selectedFileId = file.id;
             workspace.uiState.lastSelectionType = 'file';
             lastTreeSelectionType = 'file';
             persist();
             loadActiveFile();
-        }
-    });
-
-    EL.btnExport.addEventListener('click', () => {
-        const blob = new Blob([JSON.stringify(Workspace.buildWorkspaceExportPayload(workspace), null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `qa-scenarios-${new Date().getTime()}.json`;
-        a.click();
-    });
-
-    EL.btnImport.addEventListener('click', () => {
-        EL.fileInput.value = '';
-        EL.fileInput.click();
-    });
-
-    EL.fileInput.addEventListener('change', async (event) => {
-        const file = event.target.files && event.target.files[0];
-        if (!file) return;
-        try {
-            await handleImportFile(file);
-        } catch (error) {
+        },
+        onExport: handleExportClick,
+        onImportClick: () => {
+            EL.fileInput.value = '';
+            EL.fileInput.click();
+        },
+        onImportFile: handleImportFile,
+        onImportError: () => {
             alert('Import failed');
         }
     });
+}
+
+function handleDocumentKeydown(event) {
+    if (!isEditorUndoShortcut(event, EDITOR_CONFIG)) return;
+    const activeElement = document.activeElement;
+    if (activeElement === EL.editing) return;
+    if (isTextEditingElement(activeElement)) return;
+    if (!deletedFileHistoryManager.restoreLastDeletedFile()) return;
+    event.preventDefault();
+}
+
+function isTextEditingElement(element) {
+    if (!element) return false;
+    const tagName = typeof element.tagName === 'string' ? element.tagName.toLowerCase() : '';
+    if (tagName === 'input' || tagName === 'textarea') return true;
+    return element.isContentEditable === true;
 }
 
 init();

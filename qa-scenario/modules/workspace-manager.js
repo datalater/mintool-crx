@@ -39,6 +39,9 @@ function buildDefaultScenarioContent(name) {
         + '        "Example: user is redirected to the dashboard"\n'
         + '      ],\n'
         + '      "pass": false\n'
+        + '    },\n'
+        + '    {\n'
+        + '      "divider": "Example divider section"\n'
         + '    }\n'
         + '  ]\n'
         + '}';
@@ -109,6 +112,15 @@ export function normalizeWorkspace(workspace) {
     }
     if (!workspace.uiState.selectedFileId) workspace.uiState.selectedFileId = null;
     if (!workspace.uiState.lastSelectionType) workspace.uiState.lastSelectionType = 'file';
+    if (workspace.uiState.exportMode === 'required') {
+        workspace.uiState.exportMode = 'custom';
+    }
+    if (workspace.uiState.exportMode !== 'all' && workspace.uiState.exportMode !== 'custom') {
+        workspace.uiState.exportMode = 'all';
+    }
+    if (!Array.isArray(workspace.uiState.customExportFields)) {
+        workspace.uiState.customExportFields = [];
+    }
 
     if (workspace.folders.length === 0) {
         const defaultFolder = createFolderRecord(DEFAULT_FOLDER_NAME);
