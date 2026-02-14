@@ -6,7 +6,8 @@ export function buildTreeRenderOptions(deps) {
         persist,
         loadActiveFile,
         workspaceApi,
-        prompt
+        prompt,
+        onDeleteFile
     } = deps;
 
     return {
@@ -70,6 +71,11 @@ export function buildTreeRenderOptions(deps) {
         },
         onDeleteFile: (id) => {
             const workspace = getWorkspace();
+            const deletedIndex = workspace.files.findIndex(file => file.id === id);
+            const deletedFile = deletedIndex >= 0 ? workspace.files[deletedIndex] : null;
+            if (typeof onDeleteFile === 'function' && deletedFile) {
+                onDeleteFile(deletedFile, deletedIndex);
+            }
             workspace.files = workspace.files.filter(file => file.id !== id);
             if (workspace.uiState.selectedFileId === id) {
                 workspace.uiState.selectedFileId = null;

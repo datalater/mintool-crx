@@ -1,6 +1,7 @@
 export function setupMainEventListeners(config) {
     const {
         el,
+        onDocumentKeydown,
         onEditorInput,
         onEditorPaste,
         onEditorScroll,
@@ -31,6 +32,10 @@ export function setupMainEventListeners(config) {
         onImportFile,
         onImportError
     } = config;
+
+    if (typeof onDocumentKeydown === 'function') {
+        document.addEventListener('keydown', onDocumentKeydown);
+    }
 
     el.editing.addEventListener('input', onEditorInput);
     el.editing.addEventListener('paste', onEditorPaste);

@@ -43,6 +43,7 @@ import {
 } from './modules/editor-shortcut-manager.js';
 import { createEditorCursorHistoryManager } from './modules/editor-cursor-history-manager.js';
 import { createEditorFindReplaceManager } from './modules/editor-find-replace-manager.js';
+import { createDeletedFileHistoryManager } from './modules/deleted-file-history-manager.js';
 
 // --- Global State Mirroring the original ---
 const EL = {
@@ -120,6 +121,7 @@ let editorSelectionManager = null;
 let editorHighlightManager = null;
 let editorCursorHistoryManager = null;
 let editorFindReplaceManager = null;
+let deletedFileHistoryManager = null;
 
 const EXPORT_MODE_ALL = 'all';
 const EXPORT_MODE_CUSTOM = 'custom';
@@ -146,6 +148,7 @@ function init() {
     setupEditorHighlightManager();
     setupEditorCursorHistoryManager();
     setupEditorFindReplaceManager();
+    setupDeletedFileHistoryManager();
     loadWorkspace();
     setupEventListeners();
     resizerLayout.setupResizing();
@@ -188,6 +191,15 @@ function setupEditorFindReplaceManager() {
         }
     });
     renderEditorFindWidget(editorFindReplaceManager.getState());
+}
+
+function setupDeletedFileHistoryManager() {
+    deletedFileHistoryManager = createDeletedFileHistoryManager({
+        getWorkspace: () => workspace,
+        persist,
+        loadActiveFile,
+        maxEntries: 30
+    });
 }
 
 function setupResizerLayout() {
@@ -552,7 +564,10 @@ function renderTree() {
         persist,
         loadActiveFile,
         workspaceApi: Workspace,
-        prompt: (message, defaultValue) => window.prompt(message, defaultValue)
+        prompt: (message, defaultValue) => window.prompt(message, defaultValue),
+        onDeleteFile: (deletedFile, deletedIndex) => {
+            deletedFileHistoryManager.recordDeletedFile(deletedFile, deletedIndex);
+        }
     });
     UI.renderFileTree(EL.fileTree, workspace, treeOptions);
     updateFolderToggleButtonState();
@@ -917,6 +932,7 @@ function handleBeforeUnload() {
 function setupEventListeners() {
     setupMainEventListeners({
         el: EL,
+        onDocumentKeydown: handleDocumentKeydown,
         onEditorInput: handleEditorInput,
         onEditorPaste: handleEditorPaste,
         onEditorScroll: syncScroll,
@@ -1013,6 +1029,22 @@ function setupEventListeners() {
             alert('Import failed');
         }
     });
+}
+
+function handleDocumentKeydown(event) {
+    if (!isEditorUndoShortcut(event, EDITOR_CONFIG)) return;
+    const activeElement = document.activeElement;
+    if (activeElement === EL.editing) return;
+    if (isTextEditingElement(activeElement)) return;
+    if (!deletedFileHistoryManager.restoreLastDeletedFile()) return;
+    event.preventDefault();
+}
+
+function isTextEditingElement(element) {
+    if (!element) return false;
+    const tagName = typeof element.tagName === 'string' ? element.tagName.toLowerCase() : '';
+    if (tagName === 'input' || tagName === 'textarea') return true;
+    return element.isContentEditable === true;
 }
 
 init();
