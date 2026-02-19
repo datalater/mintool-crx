@@ -147,6 +147,10 @@ const BOUND_FILE_PATH_DEFAULT_LABEL = '';
 const BOUND_FILE_PATH_DEFAULT_TOOLTIP = 'No file bound';
 const LOCAL_SAVE_ONLY_TOOLTIP = '로컬 저장소(localStorage)에 저장되었습니다. 현재 디스크 파일에 직접 저장할 수 없어 이 상태를 표시합니다.';
 const DIRECTORY_LOCAL_SAVE_TOOLTIP = '폴더 기반 모드에서는 현재 로컬 저장 후 필요 시 디스크 동기화를 확장할 예정입니다. 지금은 로컬 저장을 기준으로 동작합니다.';
+const HANDLE_DB_NAME = 'qa-scenario-handles';
+const HANDLE_DB_VERSION = 1;
+const HANDLE_STORE_NAME = 'handles';
+const BOUND_DIRECTORY_HANDLE_KEY = 'bound-directory-handle';
 
 const EXPORT_MODE_ALL = 'all';
 const EXPORT_MODE_CUSTOM = 'custom';
@@ -209,6 +213,62 @@ async function loadAppVersionLabel() {
         const manifest = await response.json();
         applyVersion(manifest?.version);
     } catch {}
+}
+
+function openHandleDb() {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open(HANDLE_DB_NAME, HANDLE_DB_VERSION);
+        request.onupgradeneeded = () => {
+            const db = request.result;
+            if (!db.objectStoreNames.contains(HANDLE_STORE_NAME)) {
+                db.createObjectStore(HANDLE_STORE_NAME);
+            }
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error || new Error('Failed to open handle DB'));
+    });
+}
+
+async function setBoundDirectoryHandleInDb(handle, name) {
+    if (!handle || typeof indexedDB === 'undefined') return;
+    const db = await openHandleDb();
+    await new Promise((resolve, reject) => {
+        const tx = db.transaction(HANDLE_STORE_NAME, 'readwrite');
+        const store = tx.objectStore(HANDLE_STORE_NAME);
+        store.put({ handle, name, updatedAt: nowIso() }, BOUND_DIRECTORY_HANDLE_KEY);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error || new Error('Failed to store directory handle'));
+        tx.onabort = () => reject(tx.error || new Error('Aborted while storing directory handle'));
+    });
+    db.close();
+}
+
+async function getBoundDirectoryHandleFromDb() {
+    if (typeof indexedDB === 'undefined') return null;
+    const db = await openHandleDb();
+    const value = await new Promise((resolve, reject) => {
+        const tx = db.transaction(HANDLE_STORE_NAME, 'readonly');
+        const store = tx.objectStore(HANDLE_STORE_NAME);
+        const request = store.get(BOUND_DIRECTORY_HANDLE_KEY);
+        request.onsuccess = () => resolve(request.result || null);
+        request.onerror = () => reject(request.error || new Error('Failed to load directory handle'));
+    });
+    db.close();
+    return value;
+}
+
+async function clearBoundDirectoryHandleInDb() {
+    if (typeof indexedDB === 'undefined') return;
+    const db = await openHandleDb();
+    await new Promise((resolve, reject) => {
+        const tx = db.transaction(HANDLE_STORE_NAME, 'readwrite');
+        const store = tx.objectStore(HANDLE_STORE_NAME);
+        store.delete(BOUND_DIRECTORY_HANDLE_KEY);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error || new Error('Failed to clear directory handle'));
+        tx.onabort = () => reject(tx.error || new Error('Aborted while clearing directory handle'));
+    });
+    db.close();
 }
 
 function setupEditorSelectionManager() {
@@ -317,6 +377,30 @@ function loadWorkspace() {
     applyFileTreeWidthPreference();
     updateStorageTargetFromWorkspaceMeta();
     loadActiveFile();
+    void attemptRestoreBoundDirectoryConnection();
+}
+
+async function attemptRestoreBoundDirectoryConnection() {
+    const boundMeta = workspace?.uiState?.boundFile;
+    if (!boundMeta || boundMeta.kind !== 'directory') return;
+    if (boundDirectoryHandle) return;
+
+    let persisted = null;
+    try {
+        persisted = await getBoundDirectoryHandleFromDb();
+    } catch (error) {
+        console.warn('[qa-scenario] failed to restore bound directory handle', error);
+        return;
+    }
+
+    const handle = persisted?.handle;
+    if (!handle) return;
+
+    try {
+        await bindAndLoadFromDirectoryHandle(handle, { isRestore: true });
+    } catch (error) {
+        console.warn('[qa-scenario] auto-reconnect for directory failed', error);
+    }
 }
 
 function persist() {
@@ -984,7 +1068,8 @@ async function handleBindOpenFileClick() {
     }
 }
 
-async function bindAndLoadFromDirectoryHandle(handle) {
+async function bindAndLoadFromDirectoryHandle(handle, options = {}) {
+    const isRestore = options?.isRestore === true;
     let loaded = null;
     try {
         loaded = await loadWorkspaceFromDirectoryHandle(handle);
@@ -1013,12 +1098,17 @@ async function bindAndLoadFromDirectoryHandle(handle) {
 
     applyImportedWorkspace(loaded.workspace);
     setWorkspaceBoundFileMeta(loaded.rootName, 'directory');
+    try {
+        await setBoundDirectoryHandleInDb(handle, loaded.rootName);
+    } catch (error) {
+        console.warn('[qa-scenario] failed to persist bound directory handle', error);
+    }
     applyBoundFilePath(loaded.rootName);
     if (writeGranted) {
-        updateBoundFilePathInput(buildFolderStatusMessage('direct-save'), 'bound');
+        updateBoundFilePathInput(isRestore ? `Folder reconnected: ${loaded.loadedJsonFileCount} JSON files (direct save enabled)` : buildFolderStatusMessage('direct-save'), 'bound');
         scheduleDirectoryFileFlush();
     } else {
-        updateBoundFilePathInput(buildFolderStatusMessage('read-only'), 'warning');
+        updateBoundFilePathInput(isRestore ? `Folder reconnected: ${loaded.loadedJsonFileCount} JSON files (read-only: click Enable Sync)` : buildFolderStatusMessage('read-only'), 'warning');
     }
 }
 
@@ -1185,6 +1275,7 @@ async function bindAndLoadFromFileHandle(handle) {
     }
 
     applyImportedWorkspace(importedWorkspace);
+    void clearBoundDirectoryHandleInDb();
     boundDirectoryHandle = null;
     boundDirectoryWriteEnabled = false;
     boundDirectoryJsonFileCount = 0;
@@ -1253,6 +1344,7 @@ function clearBoundFile(options = {}) {
     directoryFlushInFlight = false;
     directoryFlushQueued = false;
     if (clearMeta) {
+        void clearBoundDirectoryHandleInDb();
         clearWorkspaceBoundFileMeta();
     }
     updateFolderWritePermissionUi();
