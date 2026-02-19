@@ -1,6 +1,7 @@
 import { getActiveFile } from './workspace-manager.js';
 
 export function createTreeRowActions(actions) {
+    if (!Array.isArray(actions) || actions.length === 0) return null;
     const actionsWrap = document.createElement('div');
     actionsWrap.className = 'tree-row-actions';
 
@@ -74,6 +75,7 @@ export function updatePassHeaderState(passHeaderToggle, currentData) {
 export function renderFileTree(container, workspace, options = {}) {
     const { 
         activeFileDirty, 
+        canMutateTree,
         onToggleFolder, 
         onSelectFile, 
         onRenameFolder, 
@@ -94,18 +96,39 @@ export function renderFileTree(container, workspace, options = {}) {
         ? workspace.uiState.selectedFileId
         : null;
     const expandedSet = new Set(workspace.uiState.expandedFolderIds || []);
-    if (activeFolderId) expandedSet.add(activeFolderId);
 
-    const sortedFolders = [...workspace.folders].sort((a, b) =>
-        a.name.localeCompare(b.name, 'en', { sensitivity: 'base', numeric: true })
-    );
+    const folderById = new Map(workspace.folders.map(folder => [folder.id, folder]));
+    const rootFolders = [];
+    const childFoldersByParentId = new Map();
+    workspace.folders.forEach((folder) => {
+        const parentId = folder.parentId;
+        if (!parentId || !folderById.has(parentId)) {
+            rootFolders.push(folder);
+            return;
+        }
+        if (!childFoldersByParentId.has(parentId)) {
+            childFoldersByParentId.set(parentId, []);
+        }
+        childFoldersByParentId.get(parentId).push(folder);
+    });
 
-    sortedFolders.forEach(folder => {
+    const filesByFolderId = new Map();
+    workspace.files.forEach((file) => {
+        if (!filesByFolderId.has(file.folderId)) {
+            filesByFolderId.set(file.folderId, []);
+        }
+        filesByFolderId.get(file.folderId).push(file);
+    });
+
+    const byName = (a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base', numeric: true });
+
+    const renderFolder = (folder, depth = 0) => {
         const folderWrap = document.createElement('div');
         folderWrap.className = 'tree-folder';
 
         const folderRow = document.createElement('div');
         folderRow.className = 'tree-folder-row';
+        folderRow.style.paddingLeft = `${10 + (depth * 16)}px`;
         folderRow.setAttribute('role', 'button');
         folderRow.tabIndex = 0;
         if (folder.id === activeFolderId) folderRow.classList.add('active-parent');
@@ -122,17 +145,23 @@ export function renderFileTree(container, workspace, options = {}) {
         const name = document.createElement('span');
         name.className = 'tree-name';
         name.textContent = folder.name;
-        name.title = folder.name;
+        name.title = folder.path || folder.name;
 
-        const folderActions = createTreeRowActions([
-            { label: 'Edit', onClick: () => onRenameFolder(folder.id) },
-            { label: 'Del', variant: 'danger', onClick: () => onDeleteFolder(folder.id) }
-        ]);
+        const folderActionItems = [];
+        if (canMutateTree && typeof onRenameFolder === 'function') {
+            folderActionItems.push({ label: 'Edit', onClick: () => onRenameFolder(folder.id) });
+        }
+        if (canMutateTree && typeof onDeleteFolder === 'function') {
+            folderActionItems.push({ label: 'Del', variant: 'danger', onClick: () => onDeleteFolder(folder.id) });
+        }
+        const folderActions = createTreeRowActions(folderActionItems);
 
         folderRow.appendChild(chevron);
         folderRow.appendChild(icon);
         folderRow.appendChild(name);
-        folderRow.appendChild(folderActions);
+        if (folderActions) {
+            folderRow.appendChild(folderActions);
+        }
         folderRow.addEventListener('click', () => onToggleFolder(folder.id));
         folderWrap.appendChild(folderRow);
 
@@ -140,19 +169,24 @@ export function renderFileTree(container, workspace, options = {}) {
             const fileList = document.createElement('div');
             fileList.className = 'tree-file-list';
 
-            const files = workspace.files
-                .filter(file => file.folderId === folder.id)
-                .sort((a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base', numeric: true }));
+            const childFolders = (childFoldersByParentId.get(folder.id) || []).sort(byName);
+            childFolders.forEach((childFolder) => {
+                fileList.appendChild(renderFolder(childFolder, depth + 1));
+            });
 
-            if (files.length === 0) {
+            const files = (filesByFolderId.get(folder.id) || []).sort(byName);
+
+            if (files.length === 0 && childFolders.length === 0) {
                 const empty = document.createElement('div');
                 empty.className = 'tree-empty';
                 empty.textContent = 'No files';
+                empty.style.paddingLeft = `${40 + (depth * 16)}px`;
                 fileList.appendChild(empty);
             } else {
                 files.forEach(file => {
                     const fileRow = document.createElement('div');
                     fileRow.className = 'tree-file-row';
+                    fileRow.style.paddingLeft = `${28 + (depth * 16)}px`;
                     const isActive = activeFile && activeFile.id === file.id;
                     if (file.id === selectedFileId) fileRow.classList.add('is-selected');
                     if (isActive) fileRow.classList.add('is-open');
@@ -169,23 +203,35 @@ export function renderFileTree(container, workspace, options = {}) {
                     fileName.textContent = visibleFileName;
                     fileName.title = visibleFileName;
 
-                    const fileActions = createTreeRowActions([
-                        { label: 'Edit', onClick: () => onRenameFile(file.id) },
-                        { label: 'Del', variant: 'danger', onClick: () => onDeleteFile(file.id) }
-                    ]);
+                    const fileActionItems = [];
+                    if (canMutateTree && typeof onRenameFile === 'function') {
+                        fileActionItems.push({ label: 'Edit', onClick: () => onRenameFile(file.id) });
+                    }
+                    if (canMutateTree && typeof onDeleteFile === 'function') {
+                        fileActionItems.push({ label: 'Del', variant: 'danger', onClick: () => onDeleteFile(file.id) });
+                    }
+                    const fileActions = createTreeRowActions(fileActionItems);
 
                     fileRow.appendChild(openIndicator);
                     fileRow.appendChild(fileIcon);
                     fileRow.appendChild(fileName);
-                    fileRow.appendChild(fileActions);
+                    if (fileActions) {
+                        fileRow.appendChild(fileActions);
+                    }
                     fileRow.addEventListener('click', () => onSelectFile(file.id));
                     fileList.appendChild(fileRow);
                 });
             }
             folderWrap.appendChild(fileList);
         }
-        container.appendChild(folderWrap);
-    });
+        return folderWrap;
+    };
+
+    rootFolders
+        .sort(byName)
+        .forEach((folder) => {
+            container.appendChild(renderFolder(folder));
+        });
 }
 
 export function renderChecklist(container, data, options = {}) {

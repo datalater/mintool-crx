@@ -2,6 +2,7 @@ export function buildTreeRenderOptions(deps) {
     const {
         getWorkspace,
         getActiveFileDirty,
+        canMutateTree,
         setLastTreeSelectionType,
         persist,
         loadActiveFile,
@@ -12,6 +13,7 @@ export function buildTreeRenderOptions(deps) {
 
     return {
         activeFileDirty: getActiveFileDirty(),
+        canMutateTree: typeof canMutateTree === 'function' ? canMutateTree() : true,
         onToggleFolder: (id) => {
             const workspace = getWorkspace();
             const expanded = new Set(workspace.uiState.expandedFolderIds);
@@ -38,6 +40,7 @@ export function buildTreeRenderOptions(deps) {
             loadActiveFile();
         },
         onRenameFolder: (id) => {
+            if (typeof canMutateTree === 'function' && !canMutateTree()) return;
             const workspace = getWorkspace();
             const folder = workspaceApi.getFolderById(workspace, id);
             const nextName = prompt('Rename folder', folder.name);
@@ -46,6 +49,7 @@ export function buildTreeRenderOptions(deps) {
             persist();
         },
         onDeleteFolder: (id) => {
+            if (typeof canMutateTree === 'function' && !canMutateTree()) return;
             const workspace = getWorkspace();
             workspace.folders = workspace.folders.filter(folder => folder.id !== id);
             workspace.files = workspace.files.filter(file => file.folderId !== id);
@@ -62,6 +66,7 @@ export function buildTreeRenderOptions(deps) {
             loadActiveFile();
         },
         onRenameFile: (id) => {
+            if (typeof canMutateTree === 'function' && !canMutateTree()) return;
             const workspace = getWorkspace();
             const file = workspaceApi.getFileById(workspace, id);
             const nextName = prompt('Rename file', file.name);
@@ -70,6 +75,7 @@ export function buildTreeRenderOptions(deps) {
             persist();
         },
         onDeleteFile: (id) => {
+            if (typeof canMutateTree === 'function' && !canMutateTree()) return;
             const workspace = getWorkspace();
             const deletedIndex = workspace.files.findIndex(file => file.id === id);
             const deletedFile = deletedIndex >= 0 ? workspace.files[deletedIndex] : null;

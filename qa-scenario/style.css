@@ -52,6 +52,13 @@ body {
     letter-spacing: 0;
 }
 
+.app-version {
+    font-family: var(--font-code);
+    font-size: 11px;
+    color: var(--text-secondary);
+    line-height: 1;
+}
+
 .actions {
     display: flex;
     align-items: center;

@@ -56,6 +56,7 @@ const EL = {
     jsonStatus: document.getElementById('json-status'),
     jsonErrorPosition: document.getElementById('json-error-position'),
     jsonErrorMessage: document.getElementById('json-error-message'),
+    appVersion: document.getElementById('app-version'),
     lineNumbers: document.getElementById('line-numbers'),
     toggleLineNumbers: document.getElementById('toggle-line-numbers'),
     editorWrapper: document.getElementById('editor-wrapper'),
@@ -126,8 +127,10 @@ let editorCursorHistoryManager = null;
 let editorFindReplaceManager = null;
 let deletedFileHistoryManager = null;
 let boundFileHandle = null;
+let boundDirectoryHandle = null;
 let boundFileName = '';
 let boundFileReadonly = false;
+let treeMutationsEnabled = true;
 let directDiskSyncAvailable = false;
 let lastSaveIndicatorState = 'saved';
 let diskFlushInFlight = false;
@@ -136,6 +139,7 @@ let diskFlushQueued = false;
 const BOUND_FILE_PATH_DEFAULT_LABEL = '';
 const BOUND_FILE_PATH_DEFAULT_TOOLTIP = 'No file bound';
 const LOCAL_SAVE_ONLY_TOOLTIP = '로컬 저장소(localStorage)에 저장되었습니다. 현재 디스크 파일에 직접 저장할 수 없어 이 상태를 표시합니다.';
+const DIRECTORY_LOCAL_SAVE_TOOLTIP = '폴더 기반 모드에서는 현재 로컬 저장 후 필요 시 디스크 동기화를 확장할 예정입니다. 지금은 로컬 저장을 기준으로 동작합니다.';
 
 const EXPORT_MODE_ALL = 'all';
 const EXPORT_MODE_CUSTOM = 'custom';
@@ -155,6 +159,7 @@ const REQUIRED_EXPORT_FIELDS = [
 // --- Initialization ---
 
 function init() {
+    loadAppVersionLabel();
     setupResizerLayout();
     setupExportMenuManager();
     setupTreeMenuManager();
@@ -171,6 +176,32 @@ function init() {
     applyFileTreePreference();
     setupTreeMenu();
     setupExportMenu();
+}
+
+async function loadAppVersionLabel() {
+    if (!EL.appVersion) return;
+
+    const applyVersion = (value) => {
+        const version = String(value || '').trim();
+        if (!version) return;
+        EL.appVersion.textContent = `v${version}`;
+        EL.appVersion.title = `Current version: v${version}`;
+    };
+
+    if (typeof chrome !== 'undefined'
+        && chrome.runtime
+        && typeof chrome.runtime.getManifest === 'function') {
+        const manifest = chrome.runtime.getManifest();
+        applyVersion(manifest?.version);
+        return;
+    }
+
+    try {
+        const response = await fetch('../manifest.json', { cache: 'no-store' });
+        if (!response.ok) return;
+        const manifest = await response.json();
+        applyVersion(manifest?.version);
+    } catch {}
 }
 
 function setupEditorSelectionManager() {
@@ -576,6 +607,7 @@ function renderTree() {
     const treeOptions = buildTreeRenderOptions({
         getWorkspace: () => workspace,
         getActiveFileDirty: () => activeFileDirty,
+        canMutateTree: () => treeMutationsEnabled,
         setLastTreeSelectionType: (nextType) => { lastTreeSelectionType = nextType; },
         persist,
         loadActiveFile,
@@ -829,11 +861,33 @@ async function handleImportFile(file) {
     const importedWorkspace = toImportedWorkspaceFromText(text);
     if (!importedWorkspace) return alert('Unsupported or invalid JSON format');
     clearBoundFile();
+    boundDirectoryHandle = null;
+    setTreeMutationsEnabled(true);
     applyImportedWorkspace(importedWorkspace);
     updateBoundFilePathInput('Imported only: not bound to disk', 'warning');
 }
 
-async function handleBindOpenClick() {
+async function handleBindOpenClick(event) {
+    const forceFileOpen = Boolean(event?.shiftKey);
+    if (!forceFileOpen && typeof window.showDirectoryPicker === 'function') {
+        try {
+            const directoryHandle = await window.showDirectoryPicker({ mode: 'read' });
+            if (!directoryHandle) return;
+            await bindAndLoadFromDirectoryHandle(directoryHandle);
+            return;
+        } catch (error) {
+            if (error?.name !== 'AbortError') {
+                console.error('[qa-scenario] open directory failed', error);
+                alert('Open folder failed');
+            }
+            return;
+        }
+    }
+
+    await handleBindOpenFileClick();
+}
+
+async function handleBindOpenFileClick() {
     if (typeof window.showOpenFilePicker !== 'function') {
         EL.fileInput.value = '';
         EL.fileInput.click();
@@ -853,9 +907,104 @@ async function handleBindOpenClick() {
         await bindAndLoadFromFileHandle(handle);
     } catch (error) {
         if (error?.name === 'AbortError') return;
-        console.error('[qa-scenario] open failed', error);
+        console.error('[qa-scenario] open file failed', error);
         alert('Open failed');
     }
+}
+
+async function bindAndLoadFromDirectoryHandle(handle) {
+    const loaded = await loadWorkspaceFromDirectoryHandle(handle);
+    if (!loaded?.workspace) {
+        alert('Unsupported or invalid directory contents');
+        return;
+    }
+
+    clearBoundFile();
+    boundDirectoryHandle = handle;
+    setTreeMutationsEnabled(false);
+    setDirectDiskSyncAvailable(false);
+
+    applyImportedWorkspace(loaded.workspace);
+    setWorkspaceBoundFileMeta(loaded.rootName, 'directory');
+    applyBoundFilePath(loaded.rootName);
+    const tone = loaded.loadedJsonFileCount > 0 ? 'warning' : 'default';
+    updateBoundFilePathInput(`Folder loaded: ${loaded.loadedJsonFileCount} JSON files (local save mode)`, tone);
+}
+
+async function loadWorkspaceFromDirectoryHandle(rootHandle) {
+    const rootName = rootHandle?.name || 'Opened Folder';
+    const folders = [];
+    const files = [];
+    const folderIdByPath = new Map();
+
+    const ensureFolder = (relativePath) => {
+        const key = relativePath || '';
+        if (folderIdByPath.has(key)) return folderIdByPath.get(key);
+        const segments = key ? key.split('/') : [];
+        const folderName = segments.length > 0 ? segments[segments.length - 1] : rootName;
+        const parentPath = segments.length > 1 ? segments.slice(0, -1).join('/') : '';
+        const parentId = segments.length > 0 ? (folderIdByPath.get(parentPath) || null) : null;
+        const folder = Workspace.createFolderRecord(folderName, parentId, key);
+        folders.push(folder);
+        folderIdByPath.set(key, folder.id);
+        return folder.id;
+    };
+
+    ensureFolder('');
+    let loadedJsonFileCount = 0;
+
+    const walkDirectory = async (dirHandle, currentPath) => {
+        for await (const [entryName, entryHandle] of dirHandle.entries()) {
+            if (entryHandle.kind === 'directory') {
+                const nextPath = currentPath ? `${currentPath}/${entryName}` : entryName;
+                ensureFolder(nextPath);
+                await walkDirectory(entryHandle, nextPath);
+                continue;
+            }
+            if (entryHandle.kind !== 'file') continue;
+            if (!entryName.toLowerCase().endsWith('.json')) continue;
+
+            let content = '';
+            try {
+                const file = await entryHandle.getFile();
+                content = await file.text();
+            } catch (error) {
+                console.warn('[qa-scenario] failed to read file from directory', entryName, error);
+                continue;
+            }
+
+            const folderId = ensureFolder(currentPath);
+            const record = Workspace.createFileRecord(folderId, entryName, content);
+            files.push(record);
+            loadedJsonFileCount += 1;
+        }
+    };
+
+    await walkDirectory(rootHandle, '');
+
+    if (files.length === 0) {
+        const fallbackFolderId = ensureFolder('');
+        const fallback = Workspace.createFileRecord(
+            fallbackFolderId,
+            DEFAULT_FILE_NAME,
+            JSON.stringify(buildRequiredScenarioWithDefaults({}), null, 2)
+        );
+        files.push(fallback);
+    }
+
+    return {
+        rootName,
+        loadedJsonFileCount,
+        workspace: {
+            version: WORKSPACE_VERSION,
+            folders,
+            files,
+            uiState: {
+                sourceMode: 'directory',
+                expandedFolderIds: folders.map((folder) => folder.id)
+            }
+        }
+    };
 }
 
 async function bindAndLoadFromFileHandle(handle) {
@@ -868,11 +1017,13 @@ async function bindAndLoadFromFileHandle(handle) {
     }
 
     applyImportedWorkspace(importedWorkspace);
+    boundDirectoryHandle = null;
+    setTreeMutationsEnabled(true);
     const readWriteGranted = await ensureReadWritePermission(handle);
     boundFileHandle = handle;
     boundFileName = file.name || 'untitled.json';
     boundFileReadonly = !readWriteGranted;
-    setWorkspaceBoundFileMeta(boundFileName);
+    setWorkspaceBoundFileMeta(boundFileName, 'file');
     applyBoundFilePath(boundFileName);
     if (boundFileReadonly) {
         setDirectDiskSyncAvailable(false);
@@ -896,9 +1047,10 @@ async function ensureReadWritePermission(handle) {
     return permission === 'granted';
 }
 
-function setWorkspaceBoundFileMeta(name) {
+function setWorkspaceBoundFileMeta(name, kind = 'file') {
     if (!workspace?.uiState) return;
     workspace.uiState.boundFile = {
+        kind,
         name,
         boundAt: nowIso()
     };
@@ -914,6 +1066,7 @@ function clearWorkspaceBoundFileMeta() {
 function clearBoundFile(options = {}) {
     const clearMeta = options.clearMeta !== false;
     boundFileHandle = null;
+    boundDirectoryHandle = null;
     boundFileName = '';
     applyBoundFilePath(BOUND_FILE_PATH_DEFAULT_LABEL);
     boundFileReadonly = false;
@@ -927,15 +1080,23 @@ function clearBoundFile(options = {}) {
 }
 
 function updateStorageTargetFromWorkspaceMeta() {
-    const name = workspace?.uiState?.boundFile?.name;
+    const boundMeta = workspace?.uiState?.boundFile;
+    const name = boundMeta?.name;
+    const kind = boundMeta?.kind || 'file';
     if (!name) {
+        setTreeMutationsEnabled(true);
         setDirectDiskSyncAvailable(false);
         applyBoundFilePath(BOUND_FILE_PATH_DEFAULT_LABEL);
         updateBoundFilePathInput(BOUND_FILE_PATH_DEFAULT_TOOLTIP);
         return;
     }
+    setTreeMutationsEnabled(kind !== 'directory');
     setDirectDiskSyncAvailable(false);
     applyBoundFilePath(name);
+    if (kind === 'directory') {
+        updateBoundFilePathInput('Not connected: re-open folder to load disk tree', 'warning');
+        return;
+    }
     updateBoundFilePathInput('Not connected: re-open file to resume direct save', 'warning');
 }
 
@@ -974,6 +1135,20 @@ function updateSaveIndicator(state) {
     refreshSaveIndicatorPresentation();
 }
 
+function setTreeMutationsEnabled(isEnabled) {
+    treeMutationsEnabled = Boolean(isEnabled);
+    if (EL.btnNewFolder) {
+        EL.btnNewFolder.title = treeMutationsEnabled
+            ? 'New folder'
+            : 'Folder mode is read-only in this version';
+    }
+    if (EL.btnNewFile) {
+        EL.btnNewFile.title = treeMutationsEnabled
+            ? 'New file'
+            : 'Folder mode is read-only in this version';
+    }
+}
+
 function setDirectDiskSyncAvailable(isAvailable) {
     directDiskSyncAvailable = Boolean(isAvailable);
     refreshSaveIndicatorPresentation();
@@ -985,7 +1160,9 @@ function refreshSaveIndicatorPresentation() {
     EL.saveIndicator.classList.toggle('is-local-only-hidden', directDiskSyncAvailable);
 
     const shouldShowLocalSaveTooltip = !directDiskSyncAvailable && lastSaveIndicatorState === 'saved';
-    const tooltip = shouldShowLocalSaveTooltip ? LOCAL_SAVE_ONLY_TOOLTIP : '';
+    const tooltip = shouldShowLocalSaveTooltip
+        ? (boundDirectoryHandle ? DIRECTORY_LOCAL_SAVE_TOOLTIP : LOCAL_SAVE_ONLY_TOOLTIP)
+        : '';
 
     EL.saveIndicator.title = tooltip;
     if (EL.saveIndicatorLabel) {
@@ -1215,6 +1392,10 @@ function setupEventListeners() {
             toggleAllPass();
         },
         onNewFolder: () => {
+            if (!treeMutationsEnabled) {
+                alert('Folder mode is read-only in this version.');
+                return;
+            }
             const name = window.prompt('Folder name', 'new-folder');
             if (!name) return;
             const folder = Workspace.createFolderRecord(name);
@@ -1222,6 +1403,10 @@ function setupEventListeners() {
             persist();
         },
         onNewFile: () => {
+            if (!treeMutationsEnabled) {
+                alert('Folder mode is read-only in this version.');
+                return;
+            }
             const folderId = workspace.uiState.selectedFolderId || workspace.folders[0].id;
             const defaultName = Workspace.getNextAvailableFileName(workspace, folderId, 'scenario.json');
             const name = window.prompt('File name', defaultName);

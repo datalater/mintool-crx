@@ -11,10 +11,7 @@ export function updateFolderToggleButtonStateView(elements, workspace, getActive
         return;
     }
 
-    const activeFile = getActiveFile(workspace);
-    const activeFolderId = activeFile ? activeFile.folderId : null;
     const expandedSet = new Set(workspace.uiState?.expandedFolderIds || []);
-    if (activeFolderId) expandedSet.add(activeFolderId);
 
     const allExpanded = folders.every(folder => expandedSet.has(folder.id));
     btnToggleFolders.disabled = false;
@@ -29,14 +26,11 @@ export function toggleAllFoldersState(workspace, getActiveFile) {
     const folders = Array.isArray(workspace.folders) ? workspace.folders : [];
     if (folders.length === 0) return false;
 
-    const activeFile = getActiveFile(workspace);
-    const activeFolderId = activeFile ? activeFile.folderId : null;
     const expandedSet = new Set(workspace.uiState.expandedFolderIds || []);
-    if (activeFolderId) expandedSet.add(activeFolderId);
 
     const allExpanded = folders.every(folder => expandedSet.has(folder.id));
     workspace.uiState.expandedFolderIds = allExpanded
-        ? (activeFolderId ? [activeFolderId] : [])
+        ? []
         : folders.map(folder => folder.id);
 
     return true;

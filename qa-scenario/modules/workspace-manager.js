@@ -3,10 +3,12 @@ import { WORKSPACE_VERSION, DEFAULT_FOLDER_NAME, DEFAULT_FILE_NAME } from '../co
 import { nowIso, nowTs } from '../utils/date.js';
 import { tryParseJson } from '../utils/json.js';
 
-export function createFolderRecord(name) {
+export function createFolderRecord(name, parentId = null, path = '') {
     return {
         id: 'folder-' + nowTs() + '-' + Math.floor(Math.random() * 1000),
         name: name,
+        parentId: parentId,
+        path: path,
         createdAt: nowIso(),
         updatedAt: nowIso()
     };
