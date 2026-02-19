@@ -137,6 +137,7 @@ let boundDirectoryWriteEnabled = false;
 let boundDirectoryJsonFileCount = 0;
 let directoryFileHandleById = new Map();
 let directoryFileFingerprintById = new Map();
+let directoryHandleByFolderId = new Map();
 let boundFileName = '';
 let boundFileReadonly = false;
 let treeMutationsEnabled = true;
@@ -752,10 +753,14 @@ function openTreeContextMenu(target) {
 
     treeContextTarget = target;
     const canMutate = treeMutationsEnabled;
+    const isDirectoryWritableMode = Boolean(boundDirectoryHandle && boundDirectoryWriteEnabled);
+    const disableFolderRename = isDirectoryWritableMode && target.type === 'folder';
 
     if (EL.treeContextRename) {
-        EL.treeContextRename.disabled = !canMutate;
-        EL.treeContextRename.textContent = target.type === 'folder' ? '폴더 이름 변경' : '파일 이름 변경';
+        EL.treeContextRename.disabled = !canMutate || disableFolderRename;
+        EL.treeContextRename.textContent = target.type === 'folder'
+            ? (disableFolderRename ? '폴더 이름 변경 (준비중)' : '폴더 이름 변경')
+            : '파일 이름 변경';
     }
     if (EL.treeContextDelete) {
         EL.treeContextDelete.disabled = !canMutate;
@@ -777,80 +782,285 @@ function openTreeContextMenu(target) {
     EL.treeContextMenu.hidden = false;
 }
 
+function isDirectoryWritableMode() {
+    return Boolean(boundDirectoryHandle && boundDirectoryWriteEnabled);
+}
+
+function getDescendantFolderIds(rootFolderId) {
+    const descendants = new Set([rootFolderId]);
+    let changed = true;
+    while (changed) {
+        changed = false;
+        workspace.folders.forEach((folder) => {
+            if (!descendants.has(folder.id) && descendants.has(folder.parentId)) {
+                descendants.add(folder.id);
+                changed = true;
+            }
+        });
+    }
+    return descendants;
+}
+
 function closeTreeContextMenu() {
     if (!EL.treeContextMenu) return;
     EL.treeContextMenu.hidden = true;
     treeContextTarget = null;
 }
 
-function handleTreeContextRename() {
+async function handleTreeContextRename() {
     if (!treeContextTarget || !treeMutationsEnabled) return;
     if (treeContextTarget.type === 'folder') {
-        renameFolderById(treeContextTarget.id);
+        await renameFolderById(treeContextTarget.id);
     } else {
-        renameFileById(treeContextTarget.id);
+        await renameFileById(treeContextTarget.id);
     }
     closeTreeContextMenu();
 }
 
-function handleTreeContextDelete() {
+async function handleTreeContextDelete() {
     if (!treeContextTarget || !treeMutationsEnabled) return;
     if (treeContextTarget.type === 'folder') {
-        deleteFolderById(treeContextTarget.id);
+        await deleteFolderById(treeContextTarget.id);
     } else {
-        deleteFileById(treeContextTarget.id);
+        await deleteFileById(treeContextTarget.id);
     }
     closeTreeContextMenu();
 }
 
-function renameFolderById(id) {
+async function renameFolderById(id) {
     const folder = Workspace.getFolderById(workspace, id);
     if (!folder) return;
+    if (isDirectoryWritableMode()) {
+        alert('폴더 이름 변경은 다음 단계에서 지원할 예정입니다.');
+        return;
+    }
     const nextName = window.prompt('Rename folder', folder.name);
     if (!nextName) return;
     folder.name = Workspace.getNextAvailableFolderName(workspace, nextName, id);
     persist();
 }
 
-function deleteFolderById(id) {
+async function deleteFolderById(id) {
     const folder = Workspace.getFolderById(workspace, id);
     if (!folder) return;
-    const childCount = workspace.files.filter((file) => file.folderId === id).length;
+    const descendantIds = getDescendantFolderIds(id);
+    const childCount = workspace.files.filter((file) => descendantIds.has(file.folderId)).length;
     const ok = window.confirm(`Delete folder "${folder.name}" and ${childCount} file(s)?`);
     if (!ok) return;
 
-    workspace.folders = workspace.folders.filter((item) => item.id !== id);
-    workspace.files = workspace.files.filter((file) => file.folderId !== id);
-    if (workspace.uiState.selectedFolderId === id) workspace.uiState.selectedFolderId = null;
+    if (isDirectoryWritableMode()) {
+        if (!folder.parentId) {
+            alert('루트 폴더는 삭제할 수 없습니다.');
+            return;
+        }
+        const parentFolder = Workspace.getFolderById(workspace, folder.parentId);
+        const parentHandle = directoryHandleByFolderId.get(folder.parentId);
+        if (!parentFolder || !parentHandle || typeof parentHandle.removeEntry !== 'function') {
+            alert('디스크 폴더 삭제에 필요한 핸들을 찾지 못했습니다.');
+            return;
+        }
+        try {
+            await parentHandle.removeEntry(folder.name, { recursive: true });
+        } catch (error) {
+            console.error('[qa-scenario] failed to delete folder on disk', error);
+            alert('디스크 폴더 삭제에 실패했습니다.');
+            return;
+        }
+    }
+
+    const removedFileIds = workspace.files.filter((file) => descendantIds.has(file.folderId)).map((file) => file.id);
+    removedFileIds.forEach((fileId) => {
+        directoryFileHandleById.delete(fileId);
+        directoryFileFingerprintById.delete(fileId);
+    });
+    descendantIds.forEach((folderId) => {
+        directoryHandleByFolderId.delete(folderId);
+    });
+
+    workspace.folders = workspace.folders.filter((item) => !descendantIds.has(item.id));
+    workspace.files = workspace.files.filter((file) => !descendantIds.has(file.folderId));
+    if (workspace.uiState.selectedFolderId && descendantIds.has(workspace.uiState.selectedFolderId)) {
+        workspace.uiState.selectedFolderId = null;
+    }
     if (workspace.uiState.selectedFileId) {
         const selected = Workspace.getFileById(workspace, workspace.uiState.selectedFileId);
-        if (!selected || selected.folderId === id) workspace.uiState.selectedFileId = null;
+        if (!selected || descendantIds.has(selected.folderId)) workspace.uiState.selectedFileId = null;
+    }
+    if (workspace.uiState.activeFileId) {
+        const active = Workspace.getFileById(workspace, workspace.uiState.activeFileId);
+        if (!active || descendantIds.has(active.folderId)) workspace.uiState.activeFileId = null;
     }
     persist();
     loadActiveFile();
 }
 
-function renameFileById(id) {
+async function renameFileById(id) {
     const file = Workspace.getFileById(workspace, id);
     if (!file) return;
     const nextName = window.prompt('Rename file', file.name);
     if (!nextName) return;
-    file.name = Workspace.getNextAvailableFileName(workspace, file.folderId, nextName, id);
+    const normalizedName = Workspace.getNextAvailableFileName(workspace, file.folderId, nextName, id);
+    if (normalizedName === file.name) return;
+
+    if (isDirectoryWritableMode()) {
+        const folderHandle = directoryHandleByFolderId.get(file.folderId);
+        if (!folderHandle) {
+            alert('디스크 파일 이름 변경에 필요한 폴더 핸들을 찾지 못했습니다.');
+            return;
+        }
+
+        const oldName = file.name;
+        const oldHandle = directoryFileHandleById.get(file.id);
+        if (!oldHandle) {
+            alert('디스크 파일 이름 변경에 필요한 파일 핸들을 찾지 못했습니다.');
+            return;
+        }
+
+        try {
+            const newHandle = await folderHandle.getFileHandle(normalizedName, { create: true });
+            const writable = await newHandle.createWritable();
+            await writable.write(file.content || '');
+            await writable.close();
+            await folderHandle.removeEntry(oldName);
+
+            const syncedFile = await newHandle.getFile();
+            directoryFileHandleById.set(file.id, newHandle);
+            directoryFileFingerprintById.set(file.id, buildFileFingerprint(syncedFile));
+        } catch (error) {
+            console.error('[qa-scenario] failed to rename file on disk', error);
+            alert('디스크 파일 이름 변경에 실패했습니다.');
+            return;
+        }
+    }
+
+    file.name = normalizedName;
+    file.updatedAt = nowTs();
     persist();
 }
 
-function deleteFileById(id) {
+async function deleteFileById(id) {
     const file = Workspace.getFileById(workspace, id);
     if (!file) return;
     const ok = window.confirm(`Delete file "${file.name}"?`);
     if (!ok) return;
+
+    if (isDirectoryWritableMode()) {
+        const folderHandle = directoryHandleByFolderId.get(file.folderId);
+        if (!folderHandle || typeof folderHandle.removeEntry !== 'function') {
+            alert('디스크 파일 삭제에 필요한 폴더 핸들을 찾지 못했습니다.');
+            return;
+        }
+        try {
+            await folderHandle.removeEntry(file.name);
+        } catch (error) {
+            console.error('[qa-scenario] failed to delete file on disk', error);
+            alert('디스크 파일 삭제에 실패했습니다.');
+            return;
+        }
+    }
 
     const deletedIndex = workspace.files.findIndex((item) => item.id === id);
     if (deletedIndex >= 0) {
         deletedFileHistoryManager.recordDeletedFile(workspace.files[deletedIndex], deletedIndex);
     }
     workspace.files = workspace.files.filter((item) => item.id !== id);
+    directoryFileHandleById.delete(id);
+    directoryFileFingerprintById.delete(id);
     if (workspace.uiState.selectedFileId === id) workspace.uiState.selectedFileId = null;
+    if (workspace.uiState.activeFileId === id) workspace.uiState.activeFileId = null;
+    persist();
+    loadActiveFile();
+}
+
+async function createFolderFromUi() {
+    if (!treeMutationsEnabled) {
+        alert('Folder mode is read-only in this version.');
+        return;
+    }
+
+    const selectedFolderId = workspace.uiState.selectedFolderId || workspace.folders[0]?.id || null;
+    const name = window.prompt('Folder name', 'new-folder');
+    if (!name) return;
+    const trimmedName = name.trim();
+    if (!trimmedName) return;
+
+    if (isDirectoryWritableMode()) {
+        const parentId = selectedFolderId;
+        const parentHandle = directoryHandleByFolderId.get(parentId);
+        const parentFolder = Workspace.getFolderById(workspace, parentId);
+        if (!parentHandle || !parentFolder) {
+            alert('디스크 폴더 생성에 필요한 부모 핸들을 찾지 못했습니다.');
+            return;
+        }
+
+        const nextName = Workspace.getNextAvailableFolderName(workspace, trimmedName);
+        try {
+            const childHandle = await parentHandle.getDirectoryHandle(nextName, { create: true });
+            const nextPath = parentFolder.path ? `${parentFolder.path}/${nextName}` : nextName;
+            const folder = Workspace.createFolderRecord(nextName, parentId, nextPath);
+            workspace.folders.push(folder);
+            directoryHandleByFolderId.set(folder.id, childHandle);
+            workspace.uiState.selectedFolderId = folder.id;
+            workspace.uiState.lastSelectionType = 'folder';
+            if (!workspace.uiState.expandedFolderIds.includes(parentId)) {
+                workspace.uiState.expandedFolderIds.push(parentId);
+            }
+            persist();
+            return;
+        } catch (error) {
+            console.error('[qa-scenario] failed to create folder on disk', error);
+            alert('디스크 폴더 생성에 실패했습니다.');
+            return;
+        }
+    }
+
+    const folder = Workspace.createFolderRecord(trimmedName);
+    workspace.folders.push(folder);
+    persist();
+}
+
+async function createFileFromUi() {
+    if (!treeMutationsEnabled) {
+        alert('Folder mode is read-only in this version.');
+        return;
+    }
+
+    const folderId = workspace.uiState.selectedFolderId || workspace.folders[0]?.id;
+    if (!folderId) return;
+    const defaultName = Workspace.getNextAvailableFileName(workspace, folderId, 'scenario.json');
+    const name = window.prompt('File name', defaultName);
+    const trimmedName = name ? name.trim() : '';
+    if (!trimmedName) return;
+    const nextName = Workspace.getNextAvailableFileName(workspace, folderId, trimmedName);
+    const file = Workspace.createFileRecord(folderId, nextName);
+
+    if (isDirectoryWritableMode()) {
+        const folderHandle = directoryHandleByFolderId.get(folderId);
+        if (!folderHandle) {
+            alert('디스크 파일 생성에 필요한 폴더 핸들을 찾지 못했습니다.');
+            return;
+        }
+        try {
+            const fileHandle = await folderHandle.getFileHandle(nextName, { create: true });
+            const writable = await fileHandle.createWritable();
+            await writable.write(file.content || '');
+            await writable.close();
+            const diskFile = await fileHandle.getFile();
+            directoryFileHandleById.set(file.id, fileHandle);
+            directoryFileFingerprintById.set(file.id, buildFileFingerprint(diskFile));
+        } catch (error) {
+            console.error('[qa-scenario] failed to create file on disk', error);
+            alert('디스크 파일 생성에 실패했습니다.');
+            return;
+        }
+    }
+
+    workspace.files.push(file);
+    workspace.uiState.activeFileId = file.id;
+    workspace.uiState.selectedFolderId = folderId;
+    workspace.uiState.selectedFileId = file.id;
+    workspace.uiState.lastSelectionType = 'file';
+    lastTreeSelectionType = 'file';
     persist();
     loadActiveFile();
 }
@@ -1223,7 +1433,8 @@ async function bindAndLoadFromDirectoryHandle(handle, options = {}) {
     boundDirectoryJsonFileCount = loaded.loadedJsonFileCount;
     directoryFileHandleById = loaded.fileHandleById;
     directoryFileFingerprintById = loaded.fileFingerprintById;
-    setTreeMutationsEnabled(false);
+    directoryHandleByFolderId = loaded.folderHandleById;
+    setTreeMutationsEnabled(writeGranted);
     setDirectDiskSyncAvailable(writeGranted);
     updateFolderWritePermissionUi();
 
@@ -1252,6 +1463,7 @@ async function loadWorkspaceFromDirectoryHandle(rootHandle, options = {}) {
     const files = [];
     const fileHandleById = new Map();
     const fileFingerprintById = new Map();
+    const folderHandleById = new Map();
     const folderIdByPath = new Map();
 
     const ensureFolder = (relativePath) => {
@@ -1268,6 +1480,10 @@ async function loadWorkspaceFromDirectoryHandle(rootHandle, options = {}) {
     };
 
     ensureFolder('');
+    const rootFolderId = folderIdByPath.get('');
+    if (rootFolderId) {
+        folderHandleById.set(rootFolderId, rootHandle);
+    }
     let loadedJsonFileCount = 0;
 
     const walkDirectory = async (dirHandle, currentPath) => {
@@ -1275,7 +1491,8 @@ async function loadWorkspaceFromDirectoryHandle(rootHandle, options = {}) {
             for await (const [entryName, entryHandle] of dirHandle.entries()) {
                 if (entryHandle.kind === 'directory') {
                     const nextPath = currentPath ? `${currentPath}/${entryName}` : entryName;
-                    ensureFolder(nextPath);
+                    const childFolderId = ensureFolder(nextPath);
+                    folderHandleById.set(childFolderId, entryHandle);
                     await walkDirectory(entryHandle, nextPath);
                     continue;
                 }
@@ -1321,6 +1538,7 @@ async function loadWorkspaceFromDirectoryHandle(rootHandle, options = {}) {
     return {
         rootName,
         loadedJsonFileCount,
+        folderHandleById,
         fileHandleById,
         fileFingerprintById,
         workspace: {
@@ -1418,10 +1636,12 @@ async function handleRequestFolderWritePermission() {
     updateFolderWritePermissionUi();
 
     if (!granted) {
+        setTreeMutationsEnabled(false);
         updateBoundFilePathInput(buildFolderStatusMessage('read-only'), 'warning');
         return;
     }
 
+    setTreeMutationsEnabled(true);
     updateBoundFilePathInput(buildFolderStatusMessage('direct-save'), 'bound');
     scheduleDirectoryFileFlush();
 }
@@ -1442,6 +1662,7 @@ async function bindAndLoadFromFileHandle(handle) {
     boundDirectoryJsonFileCount = 0;
     directoryFileHandleById = new Map();
     directoryFileFingerprintById = new Map();
+    directoryHandleByFolderId = new Map();
     setTreeMutationsEnabled(true);
     updateFolderWritePermissionUi();
     const readWriteGranted = await ensureReadWritePermission(handle);
@@ -1497,6 +1718,7 @@ function clearBoundFile(options = {}) {
     boundDirectoryJsonFileCount = 0;
     directoryFileHandleById = new Map();
     directoryFileFingerprintById = new Map();
+    directoryHandleByFolderId = new Map();
     boundFileName = '';
     applyBoundFilePath(BOUND_FILE_PATH_DEFAULT_LABEL);
     boundFileReadonly = false;
@@ -1844,38 +2066,8 @@ function setupEventListeners() {
             if (EL.passHeaderToggle.classList.contains('disabled')) return;
             toggleAllPass();
         },
-        onNewFolder: () => {
-            if (!treeMutationsEnabled) {
-                alert('Folder mode is read-only in this version.');
-                return;
-            }
-            const name = window.prompt('Folder name', 'new-folder');
-            if (!name) return;
-            const folder = Workspace.createFolderRecord(name);
-            workspace.folders.push(folder);
-            persist();
-        },
-        onNewFile: () => {
-            if (!treeMutationsEnabled) {
-                alert('Folder mode is read-only in this version.');
-                return;
-            }
-            const folderId = workspace.uiState.selectedFolderId || workspace.folders[0].id;
-            const defaultName = Workspace.getNextAvailableFileName(workspace, folderId, 'scenario.json');
-            const name = window.prompt('File name', defaultName);
-            const trimmedName = name ? name.trim() : '';
-            if (!trimmedName) return;
-            const nextName = Workspace.getNextAvailableFileName(workspace, folderId, trimmedName);
-            const file = Workspace.createFileRecord(folderId, nextName);
-            workspace.files.push(file);
-            workspace.uiState.activeFileId = file.id;
-            workspace.uiState.selectedFolderId = folderId;
-            workspace.uiState.selectedFileId = file.id;
-            workspace.uiState.lastSelectionType = 'file';
-            lastTreeSelectionType = 'file';
-            persist();
-            loadActiveFile();
-        },
+        onNewFolder: () => { void createFolderFromUi(); },
+        onNewFile: () => { void createFileFromUi(); },
         onExport: handleExportClick,
         onImportClick: handleBindOpenClick,
         onRequestFolderWritePermission: handleRequestFolderWritePermission,
