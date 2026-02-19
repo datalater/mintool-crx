@@ -78,6 +78,10 @@ body {
     min-width: 0;
 }
 
+#btn-request-write {
+    white-space: nowrap;
+}
+
 .bound-file-status {
     max-width: min(24vw, 280px);
     font-size: 11px;

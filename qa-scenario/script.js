@@ -91,6 +91,7 @@ const EL = {
     appContent: document.querySelector('.app-content'),
     editorPane: document.getElementById('editor-pane'),
     btnImport: document.getElementById('btn-import'),
+    btnRequestWrite: document.getElementById('btn-request-write'),
     boundFilePathInput: document.getElementById('bound-file-path'),
     boundFileStatus: document.getElementById('bound-file-status'),
     btnExport: document.getElementById('btn-export'),
@@ -129,6 +130,7 @@ let deletedFileHistoryManager = null;
 let boundFileHandle = null;
 let boundDirectoryHandle = null;
 let boundDirectoryWriteEnabled = false;
+let boundDirectoryJsonFileCount = 0;
 let directoryFileHandleById = new Map();
 let boundFileName = '';
 let boundFileReadonly = false;
@@ -917,7 +919,9 @@ async function handleImportFile(file) {
     if (!importedWorkspace) return alert('Unsupported or invalid JSON format');
     clearBoundFile();
     boundDirectoryHandle = null;
+    boundDirectoryJsonFileCount = 0;
     setTreeMutationsEnabled(true);
+    updateFolderWritePermissionUi();
     applyImportedWorkspace(importedWorkspace);
     updateBoundFilePathInput('Imported only: not bound to disk', 'warning');
 }
@@ -979,19 +983,20 @@ async function bindAndLoadFromDirectoryHandle(handle) {
     clearBoundFile();
     boundDirectoryHandle = handle;
     boundDirectoryWriteEnabled = writeGranted;
+    boundDirectoryJsonFileCount = loaded.loadedJsonFileCount;
     directoryFileHandleById = loaded.fileHandleById;
     setTreeMutationsEnabled(false);
     setDirectDiskSyncAvailable(writeGranted);
+    updateFolderWritePermissionUi();
 
     applyImportedWorkspace(loaded.workspace);
     setWorkspaceBoundFileMeta(loaded.rootName, 'directory');
     applyBoundFilePath(loaded.rootName);
     if (writeGranted) {
-        updateBoundFilePathInput(`Folder loaded: ${loaded.loadedJsonFileCount} JSON files (direct save enabled)`, 'bound');
+        updateBoundFilePathInput(buildFolderStatusMessage('direct-save'), 'bound');
         scheduleDirectoryFileFlush();
     } else {
-        const tone = loaded.loadedJsonFileCount > 0 ? 'warning' : 'default';
-        updateBoundFilePathInput(`Folder loaded: ${loaded.loadedJsonFileCount} JSON files (local save mode)`, tone);
+        updateBoundFilePathInput(buildFolderStatusMessage('read-only'), 'warning');
     }
 }
 
@@ -1086,6 +1091,43 @@ async function ensureDirectoryReadWritePermission(handle) {
     return permission === 'granted';
 }
 
+function buildFolderStatusMessage(mode) {
+    const count = Number.isFinite(boundDirectoryJsonFileCount) ? boundDirectoryJsonFileCount : 0;
+    if (mode === 'direct-save') {
+        return `Folder loaded: ${count} JSON files (direct save enabled)`;
+    }
+    if (mode === 'read-only') {
+        return `Folder loaded: ${count} JSON files (read-only: click Enable Sync)`;
+    }
+    return `Folder loaded: ${count} JSON files`;
+}
+
+function updateFolderWritePermissionUi() {
+    if (!EL.btnRequestWrite) return;
+    const shouldShow = Boolean(boundDirectoryHandle && !boundDirectoryWriteEnabled);
+    EL.btnRequestWrite.hidden = !shouldShow;
+    EL.btnRequestWrite.title = shouldShow
+        ? 'Request write permission for this folder'
+        : 'Write permission granted';
+}
+
+async function handleRequestFolderWritePermission() {
+    if (!boundDirectoryHandle) return;
+
+    const granted = await ensureDirectoryReadWritePermission(boundDirectoryHandle);
+    boundDirectoryWriteEnabled = granted;
+    setDirectDiskSyncAvailable(granted);
+    updateFolderWritePermissionUi();
+
+    if (!granted) {
+        updateBoundFilePathInput(buildFolderStatusMessage('read-only'), 'warning');
+        return;
+    }
+
+    updateBoundFilePathInput(buildFolderStatusMessage('direct-save'), 'bound');
+    scheduleDirectoryFileFlush();
+}
+
 async function bindAndLoadFromFileHandle(handle) {
     const file = await handle.getFile();
     const text = await file.text();
@@ -1098,8 +1140,10 @@ async function bindAndLoadFromFileHandle(handle) {
     applyImportedWorkspace(importedWorkspace);
     boundDirectoryHandle = null;
     boundDirectoryWriteEnabled = false;
+    boundDirectoryJsonFileCount = 0;
     directoryFileHandleById = new Map();
     setTreeMutationsEnabled(true);
+    updateFolderWritePermissionUi();
     const readWriteGranted = await ensureReadWritePermission(handle);
     boundFileHandle = handle;
     boundFileName = file.name || 'untitled.json';
@@ -1149,6 +1193,7 @@ function clearBoundFile(options = {}) {
     boundFileHandle = null;
     boundDirectoryHandle = null;
     boundDirectoryWriteEnabled = false;
+    boundDirectoryJsonFileCount = 0;
     directoryFileHandleById = new Map();
     boundFileName = '';
     applyBoundFilePath(BOUND_FILE_PATH_DEFAULT_LABEL);
@@ -1161,6 +1206,7 @@ function clearBoundFile(options = {}) {
     if (clearMeta) {
         clearWorkspaceBoundFileMeta();
     }
+    updateFolderWritePermissionUi();
     updateStorageTargetFromWorkspaceMeta();
 }
 
@@ -1171,12 +1217,14 @@ function updateStorageTargetFromWorkspaceMeta() {
     if (!name) {
         setTreeMutationsEnabled(true);
         setDirectDiskSyncAvailable(false);
+        updateFolderWritePermissionUi();
         applyBoundFilePath(BOUND_FILE_PATH_DEFAULT_LABEL);
         updateBoundFilePathInput(BOUND_FILE_PATH_DEFAULT_TOOLTIP);
         return;
     }
     setTreeMutationsEnabled(kind !== 'directory');
     setDirectDiskSyncAvailable(false);
+    updateFolderWritePermissionUi();
     applyBoundFilePath(name);
     if (kind === 'directory') {
         updateBoundFilePathInput('Not connected: re-open folder to load disk tree', 'warning');
@@ -1510,6 +1558,7 @@ function setupEventListeners() {
         },
         onExport: handleExportClick,
         onImportClick: handleBindOpenClick,
+        onRequestFolderWritePermission: handleRequestFolderWritePermission,
         onImportFile: handleImportFile,
         onImportError: () => {
             alert('Open failed');

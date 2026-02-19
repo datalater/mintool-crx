@@ -29,6 +29,7 @@ export function setupMainEventListeners(config) {
         onNewFile,
         onExport,
         onImportClick,
+        onRequestFolderWritePermission,
         onImportFile,
         onImportError
     } = config;
@@ -80,6 +81,9 @@ export function setupMainEventListeners(config) {
     el.btnNewFile.addEventListener('click', onNewFile);
     el.btnExport.addEventListener('click', onExport);
     el.btnImport.addEventListener('click', onImportClick);
+    if (el.btnRequestWrite && typeof onRequestFolderWritePermission === 'function') {
+        el.btnRequestWrite.addEventListener('click', onRequestFolderWritePermission);
+    }
 
     el.fileInput.addEventListener('change', async (event) => {
         const file = event.target.files?.[0];
