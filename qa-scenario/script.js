@@ -90,6 +90,7 @@ const EL = {
     editorPane: document.getElementById('editor-pane'),
     btnImport: document.getElementById('btn-import'),
     boundFilePathInput: document.getElementById('bound-file-path'),
+    boundFileStatus: document.getElementById('bound-file-status'),
     btnExport: document.getElementById('btn-export'),
     exportSplit: document.getElementById('export-split'),
     btnExportMenu: document.getElementById('btn-export-menu'),
@@ -747,19 +748,10 @@ function scheduleSave() {
 
 function scheduleBoundFileFlush() {
     if (!boundFileHandle || boundFileReadonly) return;
-    if (!canFlushBoundFile()) {
-        updateBoundFilePathInput(`Bound: ${boundFileName || 'unknown'} (sync paused: workspace has multiple files)`, 'warning');
-        return;
-    }
 
     diskFlushQueued = true;
     if (diskFlushInFlight) return;
     queueMicrotask(flushBoundFileIfNeeded);
-}
-
-function canFlushBoundFile() {
-    if (!workspace || !Array.isArray(workspace.files)) return false;
-    return workspace.files.length === 1;
 }
 
 function getBoundFileContentForFlush() {
@@ -770,9 +762,12 @@ function getBoundFileContentForFlush() {
 
 async function flushBoundFileIfNeeded() {
     if (!diskFlushQueued || diskFlushInFlight || !boundFileHandle || boundFileReadonly) return;
-    if (!canFlushBoundFile()) return;
     const content = getBoundFileContentForFlush();
-    if (typeof content !== 'string') return;
+    if (typeof content !== 'string') {
+        diskFlushQueued = false;
+        updateBoundFilePathInput('Sync skipped: no active file content', 'warning');
+        return;
+    }
 
     diskFlushQueued = false;
     diskFlushInFlight = true;
@@ -780,10 +775,10 @@ async function flushBoundFileIfNeeded() {
         const writable = await boundFileHandle.createWritable();
         await writable.write(content);
         await writable.close();
-        updateBoundFilePathInput(`Bound: ${boundFileName} (synced ${nowIso()})`, 'bound');
+        updateBoundFilePathInput(`Synced ${nowIso()}`, 'bound');
     } catch (error) {
         console.error('[qa-scenario] bound file flush failed', error);
-        updateBoundFilePathInput(`Bound: ${boundFileName} (sync failed)`, 'warning');
+        updateBoundFilePathInput('Sync failed', 'warning');
     } finally {
         diskFlushInFlight = false;
         if (diskFlushQueued) {
@@ -828,7 +823,7 @@ async function handleImportFile(file) {
     if (!importedWorkspace) return alert('Unsupported or invalid JSON format');
     clearBoundFile();
     applyImportedWorkspace(importedWorkspace);
-    updateBoundFilePathInput('Imported file (not bound)', 'warning');
+    updateBoundFilePathInput('Imported only: not bound to disk', 'warning');
 }
 
 async function handleBindOpenClick() {
@@ -873,9 +868,9 @@ async function bindAndLoadFromFileHandle(handle) {
     setWorkspaceBoundFileMeta(boundFileName);
     applyBoundFilePath(boundFileName);
     if (boundFileReadonly) {
-        updateBoundFilePathInput(`Bound: ${boundFileName} (read-only)`, 'warning');
+        updateBoundFilePathInput('Bound read-only: write permission denied', 'warning');
     } else {
-        updateBoundFilePathInput(`Bound: ${boundFileName}`, 'bound');
+        updateBoundFilePathInput('Bound: saving writes directly to file', 'bound');
         scheduleBoundFileFlush();
     }
 }
@@ -929,7 +924,7 @@ function updateStorageTargetFromWorkspaceMeta() {
         return;
     }
     applyBoundFilePath(name);
-    updateBoundFilePathInput(`Last bound: ${name} (re-open required)`, 'warning');
+    updateBoundFilePathInput('Not connected: re-open file to resume direct save', 'warning');
 }
 
 function applyBoundFilePath(path) {
@@ -938,13 +933,21 @@ function applyBoundFilePath(path) {
 }
 
 function updateBoundFilePathInput(label, tone = 'default') {
-    if (!EL.boundFilePathInput) return;
-    EL.boundFilePathInput.title = label;
-    EL.boundFilePathInput.classList.remove('is-bound', 'is-warning');
+    if (EL.boundFilePathInput) {
+        EL.boundFilePathInput.title = label;
+        EL.boundFilePathInput.classList.remove('is-bound', 'is-warning');
+    }
+    if (EL.boundFileStatus) {
+        EL.boundFileStatus.textContent = label;
+        EL.boundFileStatus.title = label;
+        EL.boundFileStatus.classList.remove('is-bound', 'is-warning');
+    }
     if (tone === 'bound') {
-        EL.boundFilePathInput.classList.add('is-bound');
+        if (EL.boundFilePathInput) EL.boundFilePathInput.classList.add('is-bound');
+        if (EL.boundFileStatus) EL.boundFileStatus.classList.add('is-bound');
     } else if (tone === 'warning') {
-        EL.boundFilePathInput.classList.add('is-warning');
+        if (EL.boundFilePathInput) EL.boundFilePathInput.classList.add('is-warning');
+        if (EL.boundFileStatus) EL.boundFileStatus.classList.add('is-warning');
     }
 }
 

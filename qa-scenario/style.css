@@ -71,6 +71,24 @@ body {
     min-width: 0;
 }
 
+.bound-file-status {
+    max-width: min(30vw, 360px);
+    font-size: 11px;
+    line-height: 1.2;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.bound-file-status.is-bound {
+    color: #79c0ff;
+}
+
+.bound-file-status.is-warning {
+    color: #d29922;
+}
+
 .bound-file-path-input {
     width: min(44vw, 460px);
     min-width: 220px;
