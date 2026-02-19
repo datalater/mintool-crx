@@ -22,7 +22,8 @@ import {
     updateLineNumbersView,
     setJsonValidationValidView,
     setJsonValidationErrorView,
-    updateJsonErrorMessageView
+    updateJsonErrorMessageView,
+    formatSavedTime
 } from './modules/editor-view-state-manager.js';
 import { setupMainEventListeners } from './modules/event-listener-manager.js';
 import { updateFolderToggleButtonStateView, toggleAllFoldersState } from './modules/tree-folder-state-manager.js';
@@ -775,7 +776,7 @@ async function flushBoundFileIfNeeded() {
         const writable = await boundFileHandle.createWritable();
         await writable.write(content);
         await writable.close();
-        updateBoundFilePathInput(`Synced ${nowIso()}`, 'bound');
+        updateBoundFilePathInput(`Synced ${formatSavedTime(nowIso())}`, 'bound');
     } catch (error) {
         console.error('[qa-scenario] bound file flush failed', error);
         updateBoundFilePathInput('Sync failed', 'warning');
@@ -929,12 +930,13 @@ function updateStorageTargetFromWorkspaceMeta() {
 
 function applyBoundFilePath(path) {
     if (!EL.boundFilePathInput) return;
-    EL.boundFilePathInput.value = path || '';
+    const value = path || '';
+    EL.boundFilePathInput.value = value;
+    EL.boundFilePathInput.title = value || BOUND_FILE_PATH_DEFAULT_TOOLTIP;
 }
 
 function updateBoundFilePathInput(label, tone = 'default') {
     if (EL.boundFilePathInput) {
-        EL.boundFilePathInput.title = label;
         EL.boundFilePathInput.classList.remove('is-bound', 'is-warning');
     }
     if (EL.boundFileStatus) {

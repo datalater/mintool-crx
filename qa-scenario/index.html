@@ -16,6 +16,7 @@
             <div class="header-controls">
                 <div class="actions">
                     <div class="bound-file-group">
+                        <span id="bound-file-status" class="bound-file-status" aria-live="polite">No file bound</span>
                         <input
                             id="bound-file-path"
                             class="bound-file-path-input"
@@ -28,7 +29,6 @@
                         <button id="btn-import" class="btn btn-secondary" title="Open JSON file">
                             <span class="btn-icon">📂</span> Open...
                         </button>
-                        <span id="bound-file-status" class="bound-file-status" aria-live="polite">No file bound</span>
                     </div>
                     <div id="export-split" class="export-split">
                         <button id="btn-export" class="btn btn-secondary" type="button">
