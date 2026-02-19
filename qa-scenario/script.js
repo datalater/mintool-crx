@@ -89,6 +89,7 @@ const EL = {
     appContent: document.querySelector('.app-content'),
     editorPane: document.getElementById('editor-pane'),
     btnImport: document.getElementById('btn-import'),
+    boundFilePathInput: document.getElementById('bound-file-path'),
     btnExport: document.getElementById('btn-export'),
     exportSplit: document.getElementById('export-split'),
     btnExportMenu: document.getElementById('btn-export-menu'),
@@ -122,6 +123,14 @@ let editorHighlightManager = null;
 let editorCursorHistoryManager = null;
 let editorFindReplaceManager = null;
 let deletedFileHistoryManager = null;
+let boundFileHandle = null;
+let boundFileName = '';
+let boundFileReadonly = false;
+let diskFlushInFlight = false;
+let diskFlushQueued = false;
+
+const BOUND_FILE_PATH_DEFAULT_LABEL = '';
+const BOUND_FILE_PATH_DEFAULT_TOOLTIP = 'No file bound';
 
 const EXPORT_MODE_ALL = 'all';
 const EXPORT_MODE_CUSTOM = 'custom';
@@ -263,6 +272,7 @@ function loadWorkspace() {
     applyLineNumberPreference();
     applyFileTreePreference();
     applyFileTreeWidthPreference();
+    updateStorageTargetFromWorkspaceMeta();
     loadActiveFile();
 }
 
@@ -270,6 +280,7 @@ function persist() {
     Workspace.persistWorkspace(workspace);
     activeFileDirty = false;
     updateSaveIndicator('saved');
+    scheduleBoundFileFlush();
     renderTree();
 }
 
@@ -734,6 +745,53 @@ function scheduleSave() {
     autosaveTimer = setTimeout(persist, AUTOSAVE_DELAY_MS || 800);
 }
 
+function scheduleBoundFileFlush() {
+    if (!boundFileHandle || boundFileReadonly) return;
+    if (!canFlushBoundFile()) {
+        updateBoundFilePathInput(`Bound: ${boundFileName || 'unknown'} (sync paused: workspace has multiple files)`, 'warning');
+        return;
+    }
+
+    diskFlushQueued = true;
+    if (diskFlushInFlight) return;
+    queueMicrotask(flushBoundFileIfNeeded);
+}
+
+function canFlushBoundFile() {
+    if (!workspace || !Array.isArray(workspace.files)) return false;
+    return workspace.files.length === 1;
+}
+
+function getBoundFileContentForFlush() {
+    const activeFile = Workspace.getActiveFile(workspace);
+    if (!activeFile) return null;
+    return activeFile.content;
+}
+
+async function flushBoundFileIfNeeded() {
+    if (!diskFlushQueued || diskFlushInFlight || !boundFileHandle || boundFileReadonly) return;
+    if (!canFlushBoundFile()) return;
+    const content = getBoundFileContentForFlush();
+    if (typeof content !== 'string') return;
+
+    diskFlushQueued = false;
+    diskFlushInFlight = true;
+    try {
+        const writable = await boundFileHandle.createWritable();
+        await writable.write(content);
+        await writable.close();
+        updateBoundFilePathInput(`Bound: ${boundFileName} (synced ${nowIso()})`, 'bound');
+    } catch (error) {
+        console.error('[qa-scenario] bound file flush failed', error);
+        updateBoundFilePathInput(`Bound: ${boundFileName} (sync failed)`, 'warning');
+    } finally {
+        diskFlushInFlight = false;
+        if (diskFlushQueued) {
+            queueMicrotask(flushBoundFileIfNeeded);
+        }
+    }
+}
+
 function flushAutosaveAndPersist() {
     if (autosaveTimer) {
         clearTimeout(autosaveTimer);
@@ -749,10 +807,9 @@ function applyImportedWorkspace(data) {
     syncExportOptionUiFromWorkspace();
 }
 
-async function handleImportFile(file) {
-    const text = await file.text();
+function toImportedWorkspaceFromText(text) {
     const parsed = tryParseJson(text);
-    if (!parsed) return alert('Invalid JSON');
+    if (!parsed) return null;
     const importedWorkspace = convertImportedPayloadToWorkspace(parsed, {
         exportFormat: EXPORT_FORMAT,
         workspaceVersion: WORKSPACE_VERSION,
@@ -762,8 +819,133 @@ async function handleImportFile(file) {
         normalizeExportMode,
         buildRequiredScenarioWithDefaults
     });
-    if (!importedWorkspace) return alert('Unsupported import format');
+    return importedWorkspace;
+}
+
+async function handleImportFile(file) {
+    const text = await file.text();
+    const importedWorkspace = toImportedWorkspaceFromText(text);
+    if (!importedWorkspace) return alert('Unsupported or invalid JSON format');
+    clearBoundFile();
     applyImportedWorkspace(importedWorkspace);
+    updateBoundFilePathInput('Imported file (not bound)', 'warning');
+}
+
+async function handleBindOpenClick() {
+    if (typeof window.showOpenFilePicker !== 'function') {
+        EL.fileInput.value = '';
+        EL.fileInput.click();
+        return;
+    }
+
+    try {
+        const [handle] = await window.showOpenFilePicker({
+            multiple: false,
+            types: [{
+                description: 'JSON Files',
+                accept: { 'application/json': ['.json'] }
+            }],
+            excludeAcceptAllOption: false
+        });
+        if (!handle) return;
+        await bindAndLoadFromFileHandle(handle);
+    } catch (error) {
+        if (error?.name === 'AbortError') return;
+        console.error('[qa-scenario] open failed', error);
+        alert('Open failed');
+    }
+}
+
+async function bindAndLoadFromFileHandle(handle) {
+    const file = await handle.getFile();
+    const text = await file.text();
+    const importedWorkspace = toImportedWorkspaceFromText(text);
+    if (!importedWorkspace) {
+        alert('Unsupported or invalid JSON format');
+        return;
+    }
+
+    applyImportedWorkspace(importedWorkspace);
+    const readWriteGranted = await ensureReadWritePermission(handle);
+    boundFileHandle = handle;
+    boundFileName = file.name || 'untitled.json';
+    boundFileReadonly = !readWriteGranted;
+    setWorkspaceBoundFileMeta(boundFileName);
+    applyBoundFilePath(boundFileName);
+    if (boundFileReadonly) {
+        updateBoundFilePathInput(`Bound: ${boundFileName} (read-only)`, 'warning');
+    } else {
+        updateBoundFilePathInput(`Bound: ${boundFileName}`, 'bound');
+        scheduleBoundFileFlush();
+    }
+}
+
+async function ensureReadWritePermission(handle) {
+    if (!handle || typeof handle.queryPermission !== 'function') return false;
+    const options = { mode: 'readwrite' };
+
+    let permission = await handle.queryPermission(options);
+    if (permission === 'granted') return true;
+    if (typeof handle.requestPermission !== 'function') return false;
+
+    permission = await handle.requestPermission(options);
+    return permission === 'granted';
+}
+
+function setWorkspaceBoundFileMeta(name) {
+    if (!workspace?.uiState) return;
+    workspace.uiState.boundFile = {
+        name,
+        boundAt: nowIso()
+    };
+    Workspace.persistWorkspace(workspace);
+}
+
+function clearWorkspaceBoundFileMeta() {
+    if (!workspace?.uiState || !workspace.uiState.boundFile) return;
+    delete workspace.uiState.boundFile;
+    Workspace.persistWorkspace(workspace);
+}
+
+function clearBoundFile(options = {}) {
+    const clearMeta = options.clearMeta !== false;
+    boundFileHandle = null;
+    boundFileName = '';
+    applyBoundFilePath(BOUND_FILE_PATH_DEFAULT_LABEL);
+    boundFileReadonly = false;
+    diskFlushInFlight = false;
+    diskFlushQueued = false;
+    if (clearMeta) {
+        clearWorkspaceBoundFileMeta();
+    }
+    updateStorageTargetFromWorkspaceMeta();
+}
+
+function updateStorageTargetFromWorkspaceMeta() {
+    const name = workspace?.uiState?.boundFile?.name;
+    if (!name) {
+        applyBoundFilePath(BOUND_FILE_PATH_DEFAULT_LABEL);
+        updateBoundFilePathInput(BOUND_FILE_PATH_DEFAULT_TOOLTIP);
+        return;
+    }
+    applyBoundFilePath(name);
+    updateBoundFilePathInput(`Last bound: ${name} (re-open required)`, 'warning');
+}
+
+function applyBoundFilePath(path) {
+    if (!EL.boundFilePathInput) return;
+    EL.boundFilePathInput.value = path || '';
+}
+
+function updateBoundFilePathInput(label, tone = 'default') {
+    if (!EL.boundFilePathInput) return;
+    EL.boundFilePathInput.title = label;
+    EL.boundFilePathInput.classList.remove('is-bound', 'is-warning');
+    if (tone === 'bound') {
+        EL.boundFilePathInput.classList.add('is-bound');
+    } else if (tone === 'warning') {
+        EL.boundFilePathInput.classList.add('is-warning');
+    }
 }
 
 function updateSaveIndicator(state) {
@@ -1020,13 +1202,10 @@ function setupEventListeners() {
             loadActiveFile();
         },
         onExport: handleExportClick,
-        onImportClick: () => {
-            EL.fileInput.value = '';
-            EL.fileInput.click();
-        },
+        onImportClick: handleBindOpenClick,
         onImportFile: handleImportFile,
         onImportError: () => {
-            alert('Import failed');
+            alert('Open failed');
         }
     });
 }

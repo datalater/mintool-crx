@@ -15,9 +15,20 @@
             </div>
             <div class="header-controls">
                 <div class="actions">
-                    <button id="btn-import" class="btn btn-secondary">
-                        <span class="btn-icon">📥</span> Import
-                    </button>
+                    <div class="bound-file-group">
+                        <input
+                            id="bound-file-path"
+                            class="bound-file-path-input"
+                            type="text"
+                            readonly
+                            placeholder="No file bound"
+                            aria-label="Bound file path"
+                            title="No file bound"
+                        >
+                        <button id="btn-import" class="btn btn-secondary" title="Open JSON file">
+                            <span class="btn-icon">📂</span> Open...
+                        </button>
+                    </div>
                     <div id="export-split" class="export-split">
                         <button id="btn-export" class="btn btn-secondary" type="button">
                             <span class="btn-icon">📤</span> Export
