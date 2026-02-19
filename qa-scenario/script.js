@@ -753,14 +753,10 @@ function openTreeContextMenu(target) {
 
     treeContextTarget = target;
     const canMutate = treeMutationsEnabled;
-    const isDirectoryWritableMode = Boolean(boundDirectoryHandle && boundDirectoryWriteEnabled);
-    const disableFolderRename = isDirectoryWritableMode && target.type === 'folder';
 
     if (EL.treeContextRename) {
-        EL.treeContextRename.disabled = !canMutate || disableFolderRename;
-        EL.treeContextRename.textContent = target.type === 'folder'
-            ? (disableFolderRename ? '폴더 이름 변경 (준비중)' : '폴더 이름 변경')
-            : '파일 이름 변경';
+        EL.treeContextRename.disabled = !canMutate;
+        EL.treeContextRename.textContent = target.type === 'folder' ? '폴더 이름 변경' : '파일 이름 변경';
     }
     if (EL.treeContextDelete) {
         EL.treeContextDelete.disabled = !canMutate;
@@ -830,14 +826,72 @@ async function handleTreeContextDelete() {
 async function renameFolderById(id) {
     const folder = Workspace.getFolderById(workspace, id);
     if (!folder) return;
-    if (isDirectoryWritableMode()) {
-        alert('폴더 이름 변경은 다음 단계에서 지원할 예정입니다.');
-        return;
-    }
     const nextName = window.prompt('Rename folder', folder.name);
     if (!nextName) return;
-    folder.name = Workspace.getNextAvailableFolderName(workspace, nextName, id);
+    const normalizedName = Workspace.getNextAvailableFolderName(workspace, nextName, id);
+    if (normalizedName === folder.name) return;
+
+    if (isDirectoryWritableMode()) {
+        if (!folder.parentId) {
+            alert('루트 폴더는 이름 변경할 수 없습니다.');
+            return;
+        }
+
+        const sourceHandle = directoryHandleByFolderId.get(folder.id);
+        const parentHandle = directoryHandleByFolderId.get(folder.parentId);
+        if (!sourceHandle || !parentHandle) {
+            alert('디스크 폴더 이름 변경에 필요한 핸들을 찾지 못했습니다.');
+            return;
+        }
+
+        const parentPath = folder.path ? folder.path.split('/').slice(0, -1).join('/') : '';
+        const renamedPath = parentPath ? `${parentPath}/${normalizedName}` : normalizedName;
+
+        try {
+            try {
+                await parentHandle.getDirectoryHandle(normalizedName, { create: false });
+                alert(`동일한 이름의 폴더가 이미 존재합니다: ${normalizedName}`);
+                return;
+            } catch {}
+
+            const targetHandle = await parentHandle.getDirectoryHandle(normalizedName, { create: true });
+            await copyDirectoryEntries(sourceHandle, targetHandle);
+            await parentHandle.removeEntry(folder.name, { recursive: true });
+
+            await bindAndLoadFromDirectoryHandle(boundDirectoryHandle, { isRestore: true });
+            const renamedFolder = workspace.folders.find((item) => item.path === renamedPath);
+            if (renamedFolder) {
+                workspace.uiState.selectedFolderId = renamedFolder.id;
+                workspace.uiState.lastSelectionType = 'folder';
+                persist();
+            }
+            updateBoundFilePathInput(`Folder renamed: ${normalizedName} (direct save enabled)`, 'bound');
+            return;
+        } catch (error) {
+            console.error('[qa-scenario] failed to rename folder on disk', error);
+            alert('디스크 폴더 이름 변경에 실패했습니다.');
+            return;
+        }
+    }
+
+    folder.name = normalizedName;
     persist();
+}
+
+async function copyDirectoryEntries(sourceHandle, targetHandle) {
+    for await (const [entryName, entryHandle] of sourceHandle.entries()) {
+        if (entryHandle.kind === 'directory') {
+            const childTarget = await targetHandle.getDirectoryHandle(entryName, { create: true });
+            await copyDirectoryEntries(entryHandle, childTarget);
+            continue;
+        }
+        if (entryHandle.kind !== 'file') continue;
+        const sourceFile = await entryHandle.getFile();
+        const targetFileHandle = await targetHandle.getFileHandle(entryName, { create: true });
+        const writable = await targetFileHandle.createWritable();
+        await writable.write(await sourceFile.arrayBuffer());
+        await writable.close();
+    }
 }
 
 async function deleteFolderById(id) {
