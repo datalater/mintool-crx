@@ -1070,23 +1070,39 @@ async function handleBindOpenFileClick() {
 
 async function bindAndLoadFromDirectoryHandle(handle, options = {}) {
     const isRestore = options?.isRestore === true;
+    const readGranted = await ensureDirectoryReadPermission(handle, {
+        interactive: !isRestore,
+        silent: isRestore
+    });
+    if (!readGranted) {
+        if (isRestore) {
+            updateBoundFilePathInput('Not connected: re-open folder to load disk tree', 'warning');
+            return false;
+        }
+        alert('Open folder failed: read permission denied');
+        return false;
+    }
+
     let loaded = null;
     try {
-        loaded = await loadWorkspaceFromDirectoryHandle(handle);
+        loaded = await loadWorkspaceFromDirectoryHandle(handle, { silentErrors: isRestore });
     } catch (error) {
         console.error('[qa-scenario] load workspace from directory failed', error);
         alert('Open folder failed while reading directory contents');
-        return;
+        return false;
     }
 
     if (!loaded?.workspace) {
         alert('Unsupported or invalid directory contents');
-        return;
+        return false;
     }
 
-    const writeGranted = await ensureDirectoryReadWritePermission(handle);
+    const writeGranted = await ensureDirectoryReadWritePermission(handle, {
+        interactive: !isRestore,
+        silent: isRestore
+    });
 
-    clearBoundFile();
+    clearBoundFile({ clearPersistedDirectoryHandle: false });
     boundDirectoryHandle = handle;
     boundDirectoryWriteEnabled = writeGranted;
     boundDirectoryJsonFileCount = loaded.loadedJsonFileCount;
@@ -1110,9 +1126,12 @@ async function bindAndLoadFromDirectoryHandle(handle, options = {}) {
     } else {
         updateBoundFilePathInput(isRestore ? `Folder reconnected: ${loaded.loadedJsonFileCount} JSON files (read-only: click Enable Sync)` : buildFolderStatusMessage('read-only'), 'warning');
     }
+
+    return true;
 }
 
-async function loadWorkspaceFromDirectoryHandle(rootHandle) {
+async function loadWorkspaceFromDirectoryHandle(rootHandle, options = {}) {
+    const silentErrors = options?.silentErrors === true;
     const rootName = rootHandle?.name || 'Opened Folder';
     const folders = [];
     const files = [];
@@ -1166,7 +1185,9 @@ async function loadWorkspaceFromDirectoryHandle(rootHandle) {
                 loadedJsonFileCount += 1;
             }
         } catch (error) {
-            console.warn('[qa-scenario] failed to traverse directory', currentPath || '.', error);
+            if (!silentErrors) {
+                console.warn('[qa-scenario] failed to traverse directory', currentPath || '.', error);
+            }
         }
     };
 
@@ -1199,19 +1220,44 @@ async function loadWorkspaceFromDirectoryHandle(rootHandle) {
     };
 }
 
-async function ensureDirectoryReadWritePermission(handle) {
+async function ensureDirectoryReadPermission(handle, options = {}) {
     if (!handle || typeof handle.queryPermission !== 'function') return false;
-    const options = { mode: 'readwrite' };
+    const interactive = options?.interactive !== false;
+    const silent = options?.silent === true;
+    const permissionOptions = { mode: 'read' };
 
     try {
-        let permission = await handle.queryPermission(options);
+        let permission = await handle.queryPermission(permissionOptions);
         if (permission === 'granted') return true;
-        if (typeof handle.requestPermission !== 'function') return false;
+        if (!interactive || typeof handle.requestPermission !== 'function') return false;
 
-        permission = await handle.requestPermission(options);
+        permission = await handle.requestPermission(permissionOptions);
         return permission === 'granted';
     } catch (error) {
-        console.warn('[qa-scenario] directory write permission request failed', error);
+        if (!silent) {
+            console.warn('[qa-scenario] directory read permission request failed', error);
+        }
+        return false;
+    }
+}
+
+async function ensureDirectoryReadWritePermission(handle, options = {}) {
+    if (!handle || typeof handle.queryPermission !== 'function') return false;
+    const interactive = options?.interactive !== false;
+    const silent = options?.silent === true;
+    const permissionOptions = { mode: 'readwrite' };
+
+    try {
+        let permission = await handle.queryPermission(permissionOptions);
+        if (permission === 'granted') return true;
+        if (!interactive || typeof handle.requestPermission !== 'function') return false;
+
+        permission = await handle.requestPermission(permissionOptions);
+        return permission === 'granted';
+    } catch (error) {
+        if (!silent) {
+            console.warn('[qa-scenario] directory write permission request failed', error);
+        }
         return false;
     }
 }
@@ -1329,6 +1375,7 @@ function clearWorkspaceBoundFileMeta() {
 
 function clearBoundFile(options = {}) {
     const clearMeta = options.clearMeta !== false;
+    const clearPersistedDirectoryHandle = options.clearPersistedDirectoryHandle !== false;
     boundFileHandle = null;
     boundDirectoryHandle = null;
     boundDirectoryWriteEnabled = false;
@@ -1344,7 +1391,9 @@ function clearBoundFile(options = {}) {
     directoryFlushInFlight = false;
     directoryFlushQueued = false;
     if (clearMeta) {
-        void clearBoundDirectoryHandleInDb();
+        if (clearPersistedDirectoryHandle) {
+            void clearBoundDirectoryHandleInDb();
+        }
         clearWorkspaceBoundFileMeta();
     }
     updateFolderWritePermissionUi();
