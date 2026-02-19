@@ -132,6 +132,7 @@ let boundDirectoryHandle = null;
 let boundDirectoryWriteEnabled = false;
 let boundDirectoryJsonFileCount = 0;
 let directoryFileHandleById = new Map();
+let directoryFileFingerprintById = new Map();
 let boundFileName = '';
 let boundFileReadonly = false;
 let treeMutationsEnabled = true;
@@ -866,9 +867,21 @@ async function flushDirectoryFileIfNeeded() {
     directoryFlushQueued = false;
     directoryFlushInFlight = true;
     try {
+        const diskFile = await target.fileHandle.getFile();
+        const currentFingerprint = buildFileFingerprint(diskFile);
+        const previousFingerprint = directoryFileFingerprintById.get(target.activeFile.id);
+        if (previousFingerprint && !isSameFileFingerprint(previousFingerprint, currentFingerprint)) {
+            setDirectDiskSyncAvailable(false);
+            updateBoundFilePathInput('Conflict: disk file changed externally (re-open folder)', 'warning');
+            return;
+        }
+
         const writable = await target.fileHandle.createWritable();
         await writable.write(target.activeFile.content || '');
         await writable.close();
+
+        const syncedFile = await target.fileHandle.getFile();
+        directoryFileFingerprintById.set(target.activeFile.id, buildFileFingerprint(syncedFile));
         setDirectDiskSyncAvailable(true);
         updateBoundFilePathInput(`Folder synced ${formatSavedTime(nowIso())}`, 'bound');
     } catch (error) {
@@ -930,7 +943,7 @@ async function handleBindOpenClick(event) {
     const forceFileOpen = Boolean(event?.shiftKey);
     if (!forceFileOpen && typeof window.showDirectoryPicker === 'function') {
         try {
-            const directoryHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+            const directoryHandle = await window.showDirectoryPicker({ mode: 'read' });
             if (!directoryHandle) return;
             await bindAndLoadFromDirectoryHandle(directoryHandle);
             return;
@@ -972,7 +985,15 @@ async function handleBindOpenFileClick() {
 }
 
 async function bindAndLoadFromDirectoryHandle(handle) {
-    const loaded = await loadWorkspaceFromDirectoryHandle(handle);
+    let loaded = null;
+    try {
+        loaded = await loadWorkspaceFromDirectoryHandle(handle);
+    } catch (error) {
+        console.error('[qa-scenario] load workspace from directory failed', error);
+        alert('Open folder failed while reading directory contents');
+        return;
+    }
+
     if (!loaded?.workspace) {
         alert('Unsupported or invalid directory contents');
         return;
@@ -985,6 +1006,7 @@ async function bindAndLoadFromDirectoryHandle(handle) {
     boundDirectoryWriteEnabled = writeGranted;
     boundDirectoryJsonFileCount = loaded.loadedJsonFileCount;
     directoryFileHandleById = loaded.fileHandleById;
+    directoryFileFingerprintById = loaded.fileFingerprintById;
     setTreeMutationsEnabled(false);
     setDirectDiskSyncAvailable(writeGranted);
     updateFolderWritePermissionUi();
@@ -1005,6 +1027,7 @@ async function loadWorkspaceFromDirectoryHandle(rootHandle) {
     const folders = [];
     const files = [];
     const fileHandleById = new Map();
+    const fileFingerprintById = new Map();
     const folderIdByPath = new Map();
 
     const ensureFolder = (relativePath) => {
@@ -1024,30 +1047,36 @@ async function loadWorkspaceFromDirectoryHandle(rootHandle) {
     let loadedJsonFileCount = 0;
 
     const walkDirectory = async (dirHandle, currentPath) => {
-        for await (const [entryName, entryHandle] of dirHandle.entries()) {
-            if (entryHandle.kind === 'directory') {
-                const nextPath = currentPath ? `${currentPath}/${entryName}` : entryName;
-                ensureFolder(nextPath);
-                await walkDirectory(entryHandle, nextPath);
-                continue;
-            }
-            if (entryHandle.kind !== 'file') continue;
-            if (!entryName.toLowerCase().endsWith('.json')) continue;
+        try {
+            for await (const [entryName, entryHandle] of dirHandle.entries()) {
+                if (entryHandle.kind === 'directory') {
+                    const nextPath = currentPath ? `${currentPath}/${entryName}` : entryName;
+                    ensureFolder(nextPath);
+                    await walkDirectory(entryHandle, nextPath);
+                    continue;
+                }
+                if (entryHandle.kind !== 'file') continue;
+                if (!entryName.toLowerCase().endsWith('.json')) continue;
 
-            let content = '';
-            try {
-                const file = await entryHandle.getFile();
-                content = await file.text();
-            } catch (error) {
-                console.warn('[qa-scenario] failed to read file from directory', entryName, error);
-                continue;
-            }
+                let file = null;
+                let content = '';
+                try {
+                    file = await entryHandle.getFile();
+                    content = await file.text();
+                } catch (error) {
+                    console.warn('[qa-scenario] failed to read file from directory', entryName, error);
+                    continue;
+                }
 
-            const folderId = ensureFolder(currentPath);
-            const record = Workspace.createFileRecord(folderId, entryName, content);
-            files.push(record);
-            fileHandleById.set(record.id, entryHandle);
-            loadedJsonFileCount += 1;
+                const folderId = ensureFolder(currentPath);
+                const record = Workspace.createFileRecord(folderId, entryName, content);
+                files.push(record);
+                fileHandleById.set(record.id, entryHandle);
+                fileFingerprintById.set(record.id, buildFileFingerprint(file));
+                loadedJsonFileCount += 1;
+            }
+        } catch (error) {
+            console.warn('[qa-scenario] failed to traverse directory', currentPath || '.', error);
         }
     };
 
@@ -1067,6 +1096,7 @@ async function loadWorkspaceFromDirectoryHandle(rootHandle) {
         rootName,
         loadedJsonFileCount,
         fileHandleById,
+        fileFingerprintById,
         workspace: {
             version: WORKSPACE_VERSION,
             folders,
@@ -1083,12 +1113,17 @@ async function ensureDirectoryReadWritePermission(handle) {
     if (!handle || typeof handle.queryPermission !== 'function') return false;
     const options = { mode: 'readwrite' };
 
-    let permission = await handle.queryPermission(options);
-    if (permission === 'granted') return true;
-    if (typeof handle.requestPermission !== 'function') return false;
+    try {
+        let permission = await handle.queryPermission(options);
+        if (permission === 'granted') return true;
+        if (typeof handle.requestPermission !== 'function') return false;
 
-    permission = await handle.requestPermission(options);
-    return permission === 'granted';
+        permission = await handle.requestPermission(options);
+        return permission === 'granted';
+    } catch (error) {
+        console.warn('[qa-scenario] directory write permission request failed', error);
+        return false;
+    }
 }
 
 function buildFolderStatusMessage(mode) {
@@ -1107,8 +1142,20 @@ function updateFolderWritePermissionUi() {
     const shouldShow = Boolean(boundDirectoryHandle && !boundDirectoryWriteEnabled);
     EL.btnRequestWrite.hidden = !shouldShow;
     EL.btnRequestWrite.title = shouldShow
-        ? 'Request write permission for this folder'
-        : 'Write permission granted';
+        ? '디스크 동기화가 꺼져 있습니다. 클릭하면 폴더 쓰기 권한을 다시 요청해 자동 동기화를 켭니다.'
+        : '폴더 쓰기 권한이 허용되어 자동 동기화가 켜져 있습니다.';
+}
+
+function buildFileFingerprint(file) {
+    return {
+        lastModified: Number(file?.lastModified) || 0,
+        size: Number(file?.size) || 0
+    };
+}
+
+function isSameFileFingerprint(left, right) {
+    if (!left || !right) return false;
+    return left.lastModified === right.lastModified && left.size === right.size;
 }
 
 async function handleRequestFolderWritePermission() {
@@ -1142,6 +1189,7 @@ async function bindAndLoadFromFileHandle(handle) {
     boundDirectoryWriteEnabled = false;
     boundDirectoryJsonFileCount = 0;
     directoryFileHandleById = new Map();
+    directoryFileFingerprintById = new Map();
     setTreeMutationsEnabled(true);
     updateFolderWritePermissionUi();
     const readWriteGranted = await ensureReadWritePermission(handle);
@@ -1195,6 +1243,7 @@ function clearBoundFile(options = {}) {
     boundDirectoryWriteEnabled = false;
     boundDirectoryJsonFileCount = 0;
     directoryFileHandleById = new Map();
+    directoryFileFingerprintById = new Map();
     boundFileName = '';
     applyBoundFilePath(BOUND_FILE_PATH_DEFAULT_LABEL);
     boundFileReadonly = false;
