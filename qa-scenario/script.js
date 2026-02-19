@@ -128,6 +128,8 @@ let editorFindReplaceManager = null;
 let deletedFileHistoryManager = null;
 let boundFileHandle = null;
 let boundDirectoryHandle = null;
+let boundDirectoryWriteEnabled = false;
+let directoryFileHandleById = new Map();
 let boundFileName = '';
 let boundFileReadonly = false;
 let treeMutationsEnabled = true;
@@ -135,6 +137,8 @@ let directDiskSyncAvailable = false;
 let lastSaveIndicatorState = 'saved';
 let diskFlushInFlight = false;
 let diskFlushQueued = false;
+let directoryFlushInFlight = false;
+let directoryFlushQueued = false;
 
 const BOUND_FILE_PATH_DEFAULT_LABEL = '';
 const BOUND_FILE_PATH_DEFAULT_TOOLTIP = 'No file bound';
@@ -317,6 +321,7 @@ function persist() {
     activeFileDirty = false;
     updateSaveIndicator('saved');
     scheduleBoundFileFlush();
+    scheduleDirectoryFileFlush();
     renderTree();
 }
 
@@ -826,6 +831,56 @@ async function flushBoundFileIfNeeded() {
     }
 }
 
+function scheduleDirectoryFileFlush() {
+    if (!boundDirectoryHandle || !boundDirectoryWriteEnabled) return;
+
+    directoryFlushQueued = true;
+    if (directoryFlushInFlight) return;
+    queueMicrotask(flushDirectoryFileIfNeeded);
+}
+
+function getActiveDirectoryFileFlushTarget() {
+    const activeFile = Workspace.getActiveFile(workspace);
+    if (!activeFile) return null;
+    const fileHandle = directoryFileHandleById.get(activeFile.id);
+    if (!fileHandle) return null;
+    return {
+        activeFile,
+        fileHandle
+    };
+}
+
+async function flushDirectoryFileIfNeeded() {
+    if (!directoryFlushQueued || directoryFlushInFlight || !boundDirectoryHandle || !boundDirectoryWriteEnabled) return;
+
+    const target = getActiveDirectoryFileFlushTarget();
+    if (!target) {
+        directoryFlushQueued = false;
+        setDirectDiskSyncAvailable(false);
+        updateBoundFilePathInput('Folder sync skipped: no active disk file', 'warning');
+        return;
+    }
+
+    directoryFlushQueued = false;
+    directoryFlushInFlight = true;
+    try {
+        const writable = await target.fileHandle.createWritable();
+        await writable.write(target.activeFile.content || '');
+        await writable.close();
+        setDirectDiskSyncAvailable(true);
+        updateBoundFilePathInput(`Folder synced ${formatSavedTime(nowIso())}`, 'bound');
+    } catch (error) {
+        console.error('[qa-scenario] directory file flush failed', error);
+        setDirectDiskSyncAvailable(false);
+        updateBoundFilePathInput('Folder sync failed', 'warning');
+    } finally {
+        directoryFlushInFlight = false;
+        if (directoryFlushQueued) {
+            queueMicrotask(flushDirectoryFileIfNeeded);
+        }
+    }
+}
+
 function flushAutosaveAndPersist() {
     if (autosaveTimer) {
         clearTimeout(autosaveTimer);
@@ -871,7 +926,7 @@ async function handleBindOpenClick(event) {
     const forceFileOpen = Boolean(event?.shiftKey);
     if (!forceFileOpen && typeof window.showDirectoryPicker === 'function') {
         try {
-            const directoryHandle = await window.showDirectoryPicker({ mode: 'read' });
+            const directoryHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
             if (!directoryHandle) return;
             await bindAndLoadFromDirectoryHandle(directoryHandle);
             return;
@@ -919,22 +974,32 @@ async function bindAndLoadFromDirectoryHandle(handle) {
         return;
     }
 
+    const writeGranted = await ensureDirectoryReadWritePermission(handle);
+
     clearBoundFile();
     boundDirectoryHandle = handle;
+    boundDirectoryWriteEnabled = writeGranted;
+    directoryFileHandleById = loaded.fileHandleById;
     setTreeMutationsEnabled(false);
-    setDirectDiskSyncAvailable(false);
+    setDirectDiskSyncAvailable(writeGranted);
 
     applyImportedWorkspace(loaded.workspace);
     setWorkspaceBoundFileMeta(loaded.rootName, 'directory');
     applyBoundFilePath(loaded.rootName);
-    const tone = loaded.loadedJsonFileCount > 0 ? 'warning' : 'default';
-    updateBoundFilePathInput(`Folder loaded: ${loaded.loadedJsonFileCount} JSON files (local save mode)`, tone);
+    if (writeGranted) {
+        updateBoundFilePathInput(`Folder loaded: ${loaded.loadedJsonFileCount} JSON files (direct save enabled)`, 'bound');
+        scheduleDirectoryFileFlush();
+    } else {
+        const tone = loaded.loadedJsonFileCount > 0 ? 'warning' : 'default';
+        updateBoundFilePathInput(`Folder loaded: ${loaded.loadedJsonFileCount} JSON files (local save mode)`, tone);
+    }
 }
 
 async function loadWorkspaceFromDirectoryHandle(rootHandle) {
     const rootName = rootHandle?.name || 'Opened Folder';
     const folders = [];
     const files = [];
+    const fileHandleById = new Map();
     const folderIdByPath = new Map();
 
     const ensureFolder = (relativePath) => {
@@ -976,6 +1041,7 @@ async function loadWorkspaceFromDirectoryHandle(rootHandle) {
             const folderId = ensureFolder(currentPath);
             const record = Workspace.createFileRecord(folderId, entryName, content);
             files.push(record);
+            fileHandleById.set(record.id, entryHandle);
             loadedJsonFileCount += 1;
         }
     };
@@ -995,6 +1061,7 @@ async function loadWorkspaceFromDirectoryHandle(rootHandle) {
     return {
         rootName,
         loadedJsonFileCount,
+        fileHandleById,
         workspace: {
             version: WORKSPACE_VERSION,
             folders,
@@ -1005,6 +1072,18 @@ async function loadWorkspaceFromDirectoryHandle(rootHandle) {
             }
         }
     };
+}
+
+async function ensureDirectoryReadWritePermission(handle) {
+    if (!handle || typeof handle.queryPermission !== 'function') return false;
+    const options = { mode: 'readwrite' };
+
+    let permission = await handle.queryPermission(options);
+    if (permission === 'granted') return true;
+    if (typeof handle.requestPermission !== 'function') return false;
+
+    permission = await handle.requestPermission(options);
+    return permission === 'granted';
 }
 
 async function bindAndLoadFromFileHandle(handle) {
@@ -1018,6 +1097,8 @@ async function bindAndLoadFromFileHandle(handle) {
 
     applyImportedWorkspace(importedWorkspace);
     boundDirectoryHandle = null;
+    boundDirectoryWriteEnabled = false;
+    directoryFileHandleById = new Map();
     setTreeMutationsEnabled(true);
     const readWriteGranted = await ensureReadWritePermission(handle);
     boundFileHandle = handle;
@@ -1067,12 +1148,16 @@ function clearBoundFile(options = {}) {
     const clearMeta = options.clearMeta !== false;
     boundFileHandle = null;
     boundDirectoryHandle = null;
+    boundDirectoryWriteEnabled = false;
+    directoryFileHandleById = new Map();
     boundFileName = '';
     applyBoundFilePath(BOUND_FILE_PATH_DEFAULT_LABEL);
     boundFileReadonly = false;
     setDirectDiskSyncAvailable(false);
     diskFlushInFlight = false;
     diskFlushQueued = false;
+    directoryFlushInFlight = false;
+    directoryFlushQueued = false;
     if (clearMeta) {
         clearWorkspaceBoundFileMeta();
     }
