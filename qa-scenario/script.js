@@ -128,11 +128,14 @@ let deletedFileHistoryManager = null;
 let boundFileHandle = null;
 let boundFileName = '';
 let boundFileReadonly = false;
+let directDiskSyncAvailable = false;
+let lastSaveIndicatorState = 'saved';
 let diskFlushInFlight = false;
 let diskFlushQueued = false;
 
 const BOUND_FILE_PATH_DEFAULT_LABEL = '';
 const BOUND_FILE_PATH_DEFAULT_TOOLTIP = 'No file bound';
+const LOCAL_SAVE_ONLY_TOOLTIP = '로컬 저장소(localStorage)에 저장되었습니다. 현재 디스크 파일에 직접 저장할 수 없어 이 상태를 표시합니다.';
 
 const EXPORT_MODE_ALL = 'all';
 const EXPORT_MODE_CUSTOM = 'custom';
@@ -766,6 +769,7 @@ async function flushBoundFileIfNeeded() {
     const content = getBoundFileContentForFlush();
     if (typeof content !== 'string') {
         diskFlushQueued = false;
+        setDirectDiskSyncAvailable(false);
         updateBoundFilePathInput('Sync skipped: no active file content', 'warning');
         return;
     }
@@ -776,9 +780,11 @@ async function flushBoundFileIfNeeded() {
         const writable = await boundFileHandle.createWritable();
         await writable.write(content);
         await writable.close();
+        setDirectDiskSyncAvailable(true);
         updateBoundFilePathInput(`Synced ${formatSavedTime(nowIso())}`, 'bound');
     } catch (error) {
         console.error('[qa-scenario] bound file flush failed', error);
+        setDirectDiskSyncAvailable(false);
         updateBoundFilePathInput('Sync failed', 'warning');
     } finally {
         diskFlushInFlight = false;
@@ -869,8 +875,10 @@ async function bindAndLoadFromFileHandle(handle) {
     setWorkspaceBoundFileMeta(boundFileName);
     applyBoundFilePath(boundFileName);
     if (boundFileReadonly) {
+        setDirectDiskSyncAvailable(false);
         updateBoundFilePathInput('Bound read-only: write permission denied', 'warning');
     } else {
+        setDirectDiskSyncAvailable(true);
         updateBoundFilePathInput('Bound: saving writes directly to file', 'bound');
         scheduleBoundFileFlush();
     }
@@ -909,6 +917,7 @@ function clearBoundFile(options = {}) {
     boundFileName = '';
     applyBoundFilePath(BOUND_FILE_PATH_DEFAULT_LABEL);
     boundFileReadonly = false;
+    setDirectDiskSyncAvailable(false);
     diskFlushInFlight = false;
     diskFlushQueued = false;
     if (clearMeta) {
@@ -920,10 +929,12 @@ function clearBoundFile(options = {}) {
 function updateStorageTargetFromWorkspaceMeta() {
     const name = workspace?.uiState?.boundFile?.name;
     if (!name) {
+        setDirectDiskSyncAvailable(false);
         applyBoundFilePath(BOUND_FILE_PATH_DEFAULT_LABEL);
         updateBoundFilePathInput(BOUND_FILE_PATH_DEFAULT_TOOLTIP);
         return;
     }
+    setDirectDiskSyncAvailable(false);
     applyBoundFilePath(name);
     updateBoundFilePathInput('Not connected: re-open file to resume direct save', 'warning');
 }
@@ -954,11 +965,32 @@ function updateBoundFilePathInput(label, tone = 'default') {
 }
 
 function updateSaveIndicator(state) {
+    lastSaveIndicatorState = state;
     updateSaveIndicatorView({
         saveIndicator: EL.saveIndicator,
         saveIndicatorTime: EL.saveIndicatorTime,
         saveIndicatorLabel: EL.saveIndicatorLabel
     }, state, workspace?.updatedAt);
+    refreshSaveIndicatorPresentation();
+}
+
+function setDirectDiskSyncAvailable(isAvailable) {
+    directDiskSyncAvailable = Boolean(isAvailable);
+    refreshSaveIndicatorPresentation();
+}
+
+function refreshSaveIndicatorPresentation() {
+    if (!EL.saveIndicator) return;
+
+    EL.saveIndicator.classList.toggle('is-local-only-hidden', directDiskSyncAvailable);
+
+    const shouldShowLocalSaveTooltip = !directDiskSyncAvailable && lastSaveIndicatorState === 'saved';
+    const tooltip = shouldShowLocalSaveTooltip ? LOCAL_SAVE_ONLY_TOOLTIP : '';
+
+    EL.saveIndicator.title = tooltip;
+    if (EL.saveIndicatorLabel) {
+        EL.saveIndicatorLabel.title = tooltip;
+    }
 }
 
 function applyLineNumberVisibility() {

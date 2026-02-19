@@ -187,6 +187,10 @@ body {
     white-space: nowrap;
 }
 
+.save-indicator.is-local-only-hidden {
+    display: none;
+}
+
 .save-indicator-time {
     font-family: var(--font-code);
     color: var(--text-primary);
