@@ -3,6 +3,8 @@ export function buildTreeRenderOptions(deps) {
         getWorkspace,
         getActiveFileDirty,
         canMutateTree,
+        showInlineActions,
+        onOpenContextMenu,
         setLastTreeSelectionType,
         persist,
         loadActiveFile,
@@ -14,6 +16,8 @@ export function buildTreeRenderOptions(deps) {
     return {
         activeFileDirty: getActiveFileDirty(),
         canMutateTree: typeof canMutateTree === 'function' ? canMutateTree() : true,
+        showInlineActions: Boolean(showInlineActions),
+        onOpenContextMenu: typeof onOpenContextMenu === 'function' ? onOpenContextMenu : null,
         onToggleFolder: (id) => {
             const workspace = getWorkspace();
             const expanded = new Set(workspace.uiState.expandedFolderIds);

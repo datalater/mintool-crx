@@ -76,6 +76,8 @@ export function renderFileTree(container, workspace, options = {}) {
     const { 
         activeFileDirty, 
         canMutateTree,
+        showInlineActions,
+        onOpenContextMenu,
         onToggleFolder, 
         onSelectFile, 
         onRenameFolder, 
@@ -148,10 +150,10 @@ export function renderFileTree(container, workspace, options = {}) {
         name.title = folder.path || folder.name;
 
         const folderActionItems = [];
-        if (canMutateTree && typeof onRenameFolder === 'function') {
+        if (showInlineActions && canMutateTree && typeof onRenameFolder === 'function') {
             folderActionItems.push({ label: 'Edit', onClick: () => onRenameFolder(folder.id) });
         }
-        if (canMutateTree && typeof onDeleteFolder === 'function') {
+        if (showInlineActions && canMutateTree && typeof onDeleteFolder === 'function') {
             folderActionItems.push({ label: 'Del', variant: 'danger', onClick: () => onDeleteFolder(folder.id) });
         }
         const folderActions = createTreeRowActions(folderActionItems);
@@ -163,6 +165,18 @@ export function renderFileTree(container, workspace, options = {}) {
             folderRow.appendChild(folderActions);
         }
         folderRow.addEventListener('click', () => onToggleFolder(folder.id));
+        if (typeof onOpenContextMenu === 'function') {
+            folderRow.addEventListener('contextmenu', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onOpenContextMenu({
+                    type: 'folder',
+                    id: folder.id,
+                    x: event.clientX,
+                    y: event.clientY
+                });
+            });
+        }
         folderWrap.appendChild(folderRow);
 
         if (isExpanded) {
@@ -204,10 +218,10 @@ export function renderFileTree(container, workspace, options = {}) {
                     fileName.title = visibleFileName;
 
                     const fileActionItems = [];
-                    if (canMutateTree && typeof onRenameFile === 'function') {
+                    if (showInlineActions && canMutateTree && typeof onRenameFile === 'function') {
                         fileActionItems.push({ label: 'Edit', onClick: () => onRenameFile(file.id) });
                     }
-                    if (canMutateTree && typeof onDeleteFile === 'function') {
+                    if (showInlineActions && canMutateTree && typeof onDeleteFile === 'function') {
                         fileActionItems.push({ label: 'Del', variant: 'danger', onClick: () => onDeleteFile(file.id) });
                     }
                     const fileActions = createTreeRowActions(fileActionItems);
@@ -219,6 +233,18 @@ export function renderFileTree(container, workspace, options = {}) {
                         fileRow.appendChild(fileActions);
                     }
                     fileRow.addEventListener('click', () => onSelectFile(file.id));
+                    if (typeof onOpenContextMenu === 'function') {
+                        fileRow.addEventListener('contextmenu', (event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            onOpenContextMenu({
+                                type: 'file',
+                                id: file.id,
+                                x: event.clientX,
+                                y: event.clientY
+                            });
+                        });
+                    }
                     fileList.appendChild(fileRow);
                 });
             }

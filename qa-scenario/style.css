@@ -671,13 +671,6 @@ body {
     white-space: nowrap;
 }
 
-.tree-folder-row:hover .tree-name,
-.tree-folder-row:focus-within .tree-name,
-.tree-file-row:hover .tree-name,
-.tree-file-row:focus-within .tree-name {
-    padding-right: 78px;
-}
-
 .tree-folder-row.active-parent .tree-chevron,
 .tree-folder-row.active-target .tree-chevron {
     color: #79c0ff;
@@ -686,30 +679,6 @@ body {
 .tree-folder-row.active-parent .tree-icon-folder,
 .tree-folder-row.active-target .tree-icon-folder {
     color: #e3b341;
-}
-
-.tree-row-actions {
-    position: absolute;
-    top: 50%;
-    right: 10px;
-    transform: translateY(-50%);
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    opacity: 0;
-    visibility: hidden;
-    pointer-events: none;
-    transition: opacity 120ms ease;
-    z-index: 1;
-}
-
-.tree-folder-row:hover .tree-row-actions,
-.tree-folder-row:focus-within .tree-row-actions,
-.tree-file-row:hover .tree-row-actions,
-.tree-file-row:focus-within .tree-row-actions {
-    opacity: 1;
-    visibility: visible;
-    pointer-events: auto;
 }
 
 .tree-row-action {
@@ -740,6 +709,53 @@ body {
     color: #ffffff;
     background-color: rgba(248, 81, 73, 0.95);
     border-color: rgba(248, 81, 73, 0.95);
+}
+
+.tree-context-menu {
+    position: fixed;
+    min-width: 160px;
+    background: var(--pane-bg);
+    border: 1px solid var(--border-muted);
+    border-radius: 8px;
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.35);
+    padding: 6px;
+    z-index: 120;
+}
+
+.tree-context-menu[hidden] {
+    display: none;
+}
+
+.tree-context-menu-item {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: var(--text-primary);
+    text-align: left;
+    font-size: 12px;
+    border-radius: 6px;
+    padding: 6px 10px;
+    cursor: pointer;
+}
+
+.tree-context-menu-item:hover:not(:disabled) {
+    background: rgba(56, 139, 253, 0.12);
+}
+
+.tree-context-menu-item:disabled {
+    color: var(--text-secondary);
+    cursor: not-allowed;
+}
+
+.tree-context-menu-item.danger {
+    color: #f85149;
+}
+
+.tree-context-readonly {
+    margin-top: 4px;
+    padding: 6px 10px;
+    font-size: 11px;
+    color: var(--text-secondary);
 }
 
 /* Editor */

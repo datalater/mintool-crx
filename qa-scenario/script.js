@@ -86,6 +86,10 @@ const EL = {
     btnShowTree: document.getElementById('btn-show-tree'),
     treeMenu: document.getElementById('tree-menu'),
     fileTree: document.getElementById('file-tree'),
+    treeContextMenu: document.getElementById('tree-context-menu'),
+    treeContextRename: document.getElementById('tree-context-rename'),
+    treeContextDelete: document.getElementById('tree-context-delete'),
+    treeContextReadonly: document.getElementById('tree-context-readonly'),
     fileTreePanel: document.querySelector('.file-tree-panel'),
     fileTreeResizer: document.getElementById('file-tree-resizer'),
     appContent: document.querySelector('.app-content'),
@@ -142,6 +146,7 @@ let diskFlushInFlight = false;
 let diskFlushQueued = false;
 let directoryFlushInFlight = false;
 let directoryFlushQueued = false;
+let treeContextTarget = null;
 
 const BOUND_FILE_PATH_DEFAULT_LABEL = '';
 const BOUND_FILE_PATH_DEFAULT_TOOLTIP = 'No file bound';
@@ -700,6 +705,8 @@ function renderTree() {
         getWorkspace: () => workspace,
         getActiveFileDirty: () => activeFileDirty,
         canMutateTree: () => treeMutationsEnabled,
+        showInlineActions: false,
+        onOpenContextMenu: openTreeContextMenu,
         setLastTreeSelectionType: (nextType) => { lastTreeSelectionType = nextType; },
         persist,
         loadActiveFile,
@@ -738,6 +745,114 @@ function setupTreeMenu() {
 function closeTreeMenu() {
     if (!treeMenuManager) return;
     treeMenuManager.close();
+}
+
+function openTreeContextMenu(target) {
+    if (!EL.treeContextMenu || !target) return;
+
+    treeContextTarget = target;
+    const canMutate = treeMutationsEnabled;
+
+    if (EL.treeContextRename) {
+        EL.treeContextRename.disabled = !canMutate;
+        EL.treeContextRename.textContent = target.type === 'folder' ? '폴더 이름 변경' : '파일 이름 변경';
+    }
+    if (EL.treeContextDelete) {
+        EL.treeContextDelete.disabled = !canMutate;
+        EL.treeContextDelete.textContent = target.type === 'folder' ? '폴더 삭제' : '파일 삭제';
+    }
+    if (EL.treeContextReadonly) {
+        EL.treeContextReadonly.hidden = canMutate;
+    }
+
+    const menuWidth = 180;
+    const menuHeight = canMutate ? 90 : 120;
+    const maxLeft = Math.max(8, window.innerWidth - menuWidth - 8);
+    const maxTop = Math.max(8, window.innerHeight - menuHeight - 8);
+    const left = Math.min(Math.max(8, target.x), maxLeft);
+    const top = Math.min(Math.max(8, target.y), maxTop);
+
+    EL.treeContextMenu.style.left = `${left}px`;
+    EL.treeContextMenu.style.top = `${top}px`;
+    EL.treeContextMenu.hidden = false;
+}
+
+function closeTreeContextMenu() {
+    if (!EL.treeContextMenu) return;
+    EL.treeContextMenu.hidden = true;
+    treeContextTarget = null;
+}
+
+function handleTreeContextRename() {
+    if (!treeContextTarget || !treeMutationsEnabled) return;
+    if (treeContextTarget.type === 'folder') {
+        renameFolderById(treeContextTarget.id);
+    } else {
+        renameFileById(treeContextTarget.id);
+    }
+    closeTreeContextMenu();
+}
+
+function handleTreeContextDelete() {
+    if (!treeContextTarget || !treeMutationsEnabled) return;
+    if (treeContextTarget.type === 'folder') {
+        deleteFolderById(treeContextTarget.id);
+    } else {
+        deleteFileById(treeContextTarget.id);
+    }
+    closeTreeContextMenu();
+}
+
+function renameFolderById(id) {
+    const folder = Workspace.getFolderById(workspace, id);
+    if (!folder) return;
+    const nextName = window.prompt('Rename folder', folder.name);
+    if (!nextName) return;
+    folder.name = Workspace.getNextAvailableFolderName(workspace, nextName, id);
+    persist();
+}
+
+function deleteFolderById(id) {
+    const folder = Workspace.getFolderById(workspace, id);
+    if (!folder) return;
+    const childCount = workspace.files.filter((file) => file.folderId === id).length;
+    const ok = window.confirm(`Delete folder "${folder.name}" and ${childCount} file(s)?`);
+    if (!ok) return;
+
+    workspace.folders = workspace.folders.filter((item) => item.id !== id);
+    workspace.files = workspace.files.filter((file) => file.folderId !== id);
+    if (workspace.uiState.selectedFolderId === id) workspace.uiState.selectedFolderId = null;
+    if (workspace.uiState.selectedFileId) {
+        const selected = Workspace.getFileById(workspace, workspace.uiState.selectedFileId);
+        if (!selected || selected.folderId === id) workspace.uiState.selectedFileId = null;
+    }
+    persist();
+    loadActiveFile();
+}
+
+function renameFileById(id) {
+    const file = Workspace.getFileById(workspace, id);
+    if (!file) return;
+    const nextName = window.prompt('Rename file', file.name);
+    if (!nextName) return;
+    file.name = Workspace.getNextAvailableFileName(workspace, file.folderId, nextName, id);
+    persist();
+}
+
+function deleteFileById(id) {
+    const file = Workspace.getFileById(workspace, id);
+    if (!file) return;
+    const ok = window.confirm(`Delete file "${file.name}"?`);
+    if (!ok) return;
+
+    const deletedIndex = workspace.files.findIndex((item) => item.id === id);
+    if (deletedIndex >= 0) {
+        deletedFileHistoryManager.recordDeletedFile(workspace.files[deletedIndex], deletedIndex);
+    }
+    workspace.files = workspace.files.filter((item) => item.id !== id);
+    if (workspace.uiState.selectedFileId === id) workspace.uiState.selectedFileId = null;
+    persist();
+    loadActiveFile();
 }
 
 function setupExportMenu() {
@@ -1638,6 +1753,21 @@ function handleWindowResize() {
 function setupWindowListeners() {
     window.addEventListener('beforeunload', handleBeforeUnload);
     window.addEventListener('resize', handleWindowResize);
+    document.addEventListener('click', (event) => {
+        if (!EL.treeContextMenu || EL.treeContextMenu.hidden) return;
+        if (EL.treeContextMenu.contains(event.target)) return;
+        closeTreeContextMenu();
+    });
+    document.addEventListener('keydown', (event) => {
+        if (event.key !== 'Escape') return;
+        closeTreeContextMenu();
+    });
+    if (EL.treeContextRename) {
+        EL.treeContextRename.addEventListener('click', handleTreeContextRename);
+    }
+    if (EL.treeContextDelete) {
+        EL.treeContextDelete.addEventListener('click', handleTreeContextDelete);
+    }
 }
 
 function handleBeforeUnload() {
