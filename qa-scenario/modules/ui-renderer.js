@@ -217,6 +217,14 @@ export function renderChecklist(container, data, options = {}) {
             dividerCell.colSpan = 5;
             dividerCell.textContent = getChecklistDividerTitle(step);
             dividerRow.appendChild(dividerCell);
+            dividerRow.addEventListener('click', () => {
+                const rows = container.querySelectorAll('tr');
+                rows.forEach((row) => {
+                    row.classList.remove('selected-row');
+                });
+                dividerRow.classList.add('selected-row');
+                onHighlightStep(index);
+            });
             container.appendChild(dividerRow);
             return;
         }

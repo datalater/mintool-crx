@@ -954,6 +954,11 @@ tr:hover {
     cursor: pointer;
 }
 
+thead tr:hover {
+    background-color: transparent;
+    cursor: default;
+}
+
 tr.selected-row {
     background-color: rgba(88, 166, 255, 0.1);
 }
@@ -964,7 +969,7 @@ tr.checklist-divider-row {
 
 tr.checklist-divider-row:hover {
     background: rgba(56, 139, 253, 0.16);
-    cursor: default;
+    cursor: pointer;
 }
 
 tr.checklist-divider-row td {
