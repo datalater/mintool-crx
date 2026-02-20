@@ -562,6 +562,11 @@ body {
     background-color: rgba(56, 139, 253, 0.12);
 }
 
+.tree-folder-row.is-drop-target {
+    background-color: rgba(56, 139, 253, 0.24);
+    box-shadow: inset 0 0 0 1px rgba(121, 192, 255, 0.45);
+}
+
 .tree-folder-row.active-parent .tree-name,
 .tree-folder-row.active-target .tree-name {
     color: #79c0ff;
@@ -578,6 +583,10 @@ body {
 .tree-file-row.is-selected {
     background-color: rgba(47, 129, 247, 0.24);
     color: #f0f6fc;
+}
+
+.tree-file-row.is-dragging {
+    opacity: 0.45;
 }
 
 .tree-open-indicator {

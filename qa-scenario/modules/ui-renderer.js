@@ -78,6 +78,7 @@ export function renderFileTree(container, workspace, options = {}) {
         canMutateTree,
         showInlineActions,
         onOpenContextMenu,
+        onMoveFile,
         onToggleFolder, 
         onSelectFile, 
         onRenameFolder, 
@@ -98,6 +99,9 @@ export function renderFileTree(container, workspace, options = {}) {
         ? workspace.uiState.selectedFileId
         : null;
     const expandedSet = new Set(workspace.uiState.expandedFolderIds || []);
+    const canDragMove = Boolean(canMutateTree && typeof onMoveFile === 'function');
+    const DRAG_FILE_MIME = 'application/x-qa-scenario-file-id';
+    let draggingFileId = '';
 
     const folderById = new Map(workspace.folders.map(folder => [folder.id, folder]));
     const rootFolders = [];
@@ -123,6 +127,30 @@ export function renderFileTree(container, workspace, options = {}) {
     });
 
     const byName = (a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base', numeric: true });
+
+    const getDraggedFileId = (dataTransfer) => {
+        if (!dataTransfer || typeof dataTransfer.getData !== 'function') return '';
+        return dataTransfer.getData(DRAG_FILE_MIME) || dataTransfer.getData('text/plain') || '';
+    };
+
+    const getCurrentDraggedFileId = (dataTransfer) => draggingFileId || getDraggedFileId(dataTransfer);
+
+    const clearDropTargets = () => {
+        if (!container || typeof container.querySelectorAll !== 'function') return;
+        container.querySelectorAll('.tree-folder-row.is-drop-target').forEach((node) => {
+            node.classList.remove('is-drop-target');
+        });
+    };
+
+    const moveFileToFolder = (fileId, folderId) => {
+        if (!canDragMove) return;
+        const maybePromise = onMoveFile(fileId, folderId);
+        if (maybePromise && typeof maybePromise.catch === 'function') {
+            maybePromise.catch((error) => {
+                console.error('[qa-scenario] failed to move file by drag and drop', error);
+            });
+        }
+    };
 
     const renderFolder = (folder, depth = 0) => {
         const folderWrap = document.createElement('div');
@@ -164,6 +192,38 @@ export function renderFileTree(container, workspace, options = {}) {
         if (folderActions) {
             folderRow.appendChild(folderActions);
         }
+
+        if (canDragMove) {
+            folderRow.addEventListener('dragover', (event) => {
+                const draggedFileId = getCurrentDraggedFileId(event.dataTransfer);
+                if (!draggedFileId) return;
+                const draggedFile = workspace.files.find((item) => item.id === draggedFileId);
+                if (!draggedFile || draggedFile.folderId === folder.id) return;
+                event.preventDefault();
+                if (event.dataTransfer) {
+                    event.dataTransfer.dropEffect = 'move';
+                }
+                folderRow.classList.add('is-drop-target');
+            });
+
+            folderRow.addEventListener('dragleave', () => {
+                folderRow.classList.remove('is-drop-target');
+            });
+
+            folderRow.addEventListener('drop', (event) => {
+                folderRow.classList.remove('is-drop-target');
+                const draggedFileId = getCurrentDraggedFileId(event.dataTransfer);
+                if (!draggedFileId) return;
+                const draggedFile = workspace.files.find((item) => item.id === draggedFileId);
+                if (!draggedFile || draggedFile.folderId === folder.id) return;
+                event.preventDefault();
+                event.stopPropagation();
+                draggingFileId = '';
+                clearDropTargets();
+                moveFileToFolder(draggedFileId, folder.id);
+            });
+        }
+
         folderRow.addEventListener('click', () => onToggleFolder(folder.id));
         if (typeof onOpenContextMenu === 'function') {
             folderRow.addEventListener('contextmenu', (event) => {
@@ -231,6 +291,22 @@ export function renderFileTree(container, workspace, options = {}) {
                     fileRow.appendChild(fileName);
                     if (fileActions) {
                         fileRow.appendChild(fileActions);
+                    }
+                    if (canDragMove) {
+                        fileRow.draggable = true;
+                        fileRow.addEventListener('dragstart', (event) => {
+                            if (!event.dataTransfer) return;
+                            draggingFileId = file.id;
+                            event.dataTransfer.effectAllowed = 'move';
+                            event.dataTransfer.setData(DRAG_FILE_MIME, file.id);
+                            event.dataTransfer.setData('text/plain', file.id);
+                            fileRow.classList.add('is-dragging');
+                        });
+                        fileRow.addEventListener('dragend', () => {
+                            draggingFileId = '';
+                            fileRow.classList.remove('is-dragging');
+                            clearDropTargets();
+                        });
                     }
                     fileRow.addEventListener('click', () => onSelectFile(file.id));
                     if (typeof onOpenContextMenu === 'function') {

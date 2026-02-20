@@ -715,7 +715,8 @@ function renderTree() {
         prompt: (message, defaultValue) => window.prompt(message, defaultValue),
         onDeleteFile: (deletedFile, deletedIndex) => {
             deletedFileHistoryManager.recordDeletedFile(deletedFile, deletedIndex);
-        }
+        },
+        onMoveFile: (fileId, targetFolderId) => moveFileById(fileId, targetFolderId)
     });
     UI.renderFileTree(EL.fileTree, workspace, treeOptions);
     updateFolderToggleButtonState();
@@ -1024,6 +1025,71 @@ async function deleteFileById(id) {
     if (workspace.uiState.activeFileId === id) workspace.uiState.activeFileId = null;
     persist();
     loadActiveFile();
+}
+
+async function moveFileById(id, targetFolderId) {
+    if (!treeMutationsEnabled) return;
+
+    const file = Workspace.getFileById(workspace, id);
+    const targetFolder = Workspace.getFolderById(workspace, targetFolderId);
+    if (!file || !targetFolder) return;
+    if (file.folderId === targetFolderId) return;
+
+    const sourceFolderId = file.folderId;
+    const sourceName = file.name;
+    const nextName = Workspace.getNextAvailableFileName(workspace, targetFolderId, sourceName, file.id);
+
+    if (isDirectoryWritableMode()) {
+        const sourceFolderHandle = directoryHandleByFolderId.get(sourceFolderId);
+        const targetFolderHandle = directoryHandleByFolderId.get(targetFolderId);
+        if (!sourceFolderHandle || !targetFolderHandle) {
+            alert('디스크 파일 이동에 필요한 폴더 핸들을 찾지 못했습니다.');
+            return;
+        }
+
+        let targetFileHandle = null;
+        try {
+            targetFileHandle = await targetFolderHandle.getFileHandle(nextName, { create: true });
+            const writable = await targetFileHandle.createWritable();
+            await writable.write(file.content || '');
+            await writable.close();
+
+            await sourceFolderHandle.removeEntry(sourceName);
+
+            const syncedFile = await targetFileHandle.getFile();
+            directoryFileHandleById.set(file.id, targetFileHandle);
+            directoryFileFingerprintById.set(file.id, buildFileFingerprint(syncedFile));
+        } catch (error) {
+            if (targetFileHandle && typeof targetFolderHandle.removeEntry === 'function') {
+                try {
+                    await targetFolderHandle.removeEntry(nextName);
+                } catch (rollbackError) {
+                    console.warn('[qa-scenario] failed to rollback moved file on disk', rollbackError);
+                }
+            }
+            console.error('[qa-scenario] failed to move file on disk', error);
+            alert('디스크 파일 이동에 실패했습니다.');
+            return;
+        }
+    }
+
+    file.folderId = targetFolderId;
+    file.name = nextName;
+    file.updatedAt = nowTs();
+
+    workspace.uiState.selectedFolderId = targetFolderId;
+    workspace.uiState.selectedFileId = file.id;
+    workspace.uiState.lastSelectionType = 'file';
+    lastTreeSelectionType = 'file';
+
+    const expandedSet = new Set(workspace.uiState.expandedFolderIds || []);
+    expandedSet.add(targetFolderId);
+    workspace.uiState.expandedFolderIds = Array.from(expandedSet);
+
+    persist();
+    if (workspace.uiState.activeFileId === file.id) {
+        loadActiveFile();
+    }
 }
 
 async function createFolderFromUi() {

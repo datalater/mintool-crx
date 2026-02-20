@@ -50,3 +50,18 @@ test('onDeleteFile callback receives deleted file and index', () => {
     assertEqual(workspace.files.length, 1);
     assertEqual(workspace.files[0].id, 'file-1');
 });
+
+test('onMoveFile callback is exposed in tree render options', () => {
+    let moved = null;
+    const { deps } = createDeps({
+        onMoveFile: (fileId, folderId) => {
+            moved = { fileId, folderId };
+        }
+    });
+
+    const options = buildTreeRenderOptions(deps);
+    options.onMoveFile('file-1', 'folder-1');
+
+    assertEqual(moved.fileId, 'file-1');
+    assertEqual(moved.folderId, 'folder-1');
+});

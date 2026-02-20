@@ -10,7 +10,8 @@ export function buildTreeRenderOptions(deps) {
         loadActiveFile,
         workspaceApi,
         prompt,
-        onDeleteFile
+        onDeleteFile,
+        onMoveFile
     } = deps;
 
     return {
@@ -18,6 +19,7 @@ export function buildTreeRenderOptions(deps) {
         canMutateTree: typeof canMutateTree === 'function' ? canMutateTree() : true,
         showInlineActions: Boolean(showInlineActions),
         onOpenContextMenu: typeof onOpenContextMenu === 'function' ? onOpenContextMenu : null,
+        onMoveFile: typeof onMoveFile === 'function' ? onMoveFile : null,
         onToggleFolder: (id) => {
             const workspace = getWorkspace();
             const expanded = new Set(workspace.uiState.expandedFolderIds);
