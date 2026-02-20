@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented in this file.
 
+## [2.2.3] - 2026-02-20
+
+### Added
+- File drag-and-drop move support in QA Scenario tree (`file -> folder`) with drop-target highlight.
+- Tree action option and unit-test coverage for move callback wiring.
+
+### Changed
+- Improved drag/drop reliability in Chrome by tracking active dragged file id during `dragover`/`drop`.
+- Manifest version bumped to `2.2.3`.
+
+### Fixed
+- Fixed a case where folder drop was not accepted even when dragging over another folder row.
+
 ## [2.2.2] - 2026-02-20
 
 ### Added
