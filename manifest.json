@@ -42,7 +42,7 @@
         "lib/wait-for-element.js",
         "lib/dom-utils.js",
         "lib/toastify.js",
-        "lib/dom-eraser.js",
+        "lib/draggable.js","lib/dom-style-editor.js","lib/dom-eraser.js",
         "lib/vue-min.js"
       ],
       "matches": ["<all_urls>"]

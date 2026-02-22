@@ -20,6 +20,13 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 
   chrome.contextMenus.create({
+    id: "edit-style",
+    parentId: "mintool-parent",
+    title: "DOM 스타일 편집하기",
+    contexts: ["all"],
+  });
+
+  chrome.contextMenus.create({
     id: "undo-dom",
     parentId: "mintool-parent",
     title: "복원하기 (없음)",
@@ -32,6 +39,8 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (["remove-dom", "hide-dom", "undo-dom"].includes(info.menuItemId)) {
     const action = info.menuItemId.replace("-dom", "");
     chrome.tabs.sendMessage(tab.id, { action });
+  } else if (info.menuItemId === "edit-style") {
+    chrome.tabs.sendMessage(tab.id, { action: "edit-style" });
   }
 });
 
