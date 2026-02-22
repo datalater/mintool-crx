@@ -87,6 +87,7 @@ const EL = {
     treeMenu: document.getElementById('tree-menu'),
     fileTree: document.getElementById('file-tree'),
     treeContextMenu: document.getElementById('tree-context-menu'),
+    treeContextCopy: document.getElementById('tree-context-copy'),
     treeContextRename: document.getElementById('tree-context-rename'),
     treeContextDelete: document.getElementById('tree-context-delete'),
     treeContextReadonly: document.getElementById('tree-context-readonly'),
@@ -148,6 +149,7 @@ let diskFlushQueued = false;
 let directoryFlushInFlight = false;
 let directoryFlushQueued = false;
 let treeContextTarget = null;
+const pendingCopyFileIds = new Set();
 
 const BOUND_FILE_PATH_DEFAULT_LABEL = '';
 const BOUND_FILE_PATH_DEFAULT_TOOLTIP = 'No file bound';
@@ -718,6 +720,7 @@ function renderTree() {
         },
         onMoveFile: (fileId, targetFolderId) => moveFileById(fileId, targetFolderId)
     });
+    treeOptions.pendingCopyFileIds = pendingCopyFileIds;
     UI.renderFileTree(EL.fileTree, workspace, treeOptions);
     updateFolderToggleButtonState();
 }
@@ -759,6 +762,12 @@ function openTreeContextMenu(target) {
         EL.treeContextRename.disabled = !canMutate;
         EL.treeContextRename.textContent = target.type === 'folder' ? '폴더 이름 변경' : '파일 이름 변경';
     }
+    if (EL.treeContextCopy) {
+        const isFileTarget = target.type === 'file';
+        EL.treeContextCopy.hidden = !isFileTarget;
+        EL.treeContextCopy.disabled = !canMutate;
+        EL.treeContextCopy.textContent = '파일 복사';
+    }
     if (EL.treeContextDelete) {
         EL.treeContextDelete.disabled = !canMutate;
         EL.treeContextDelete.textContent = target.type === 'folder' ? '폴더 삭제' : '파일 삭제';
@@ -768,7 +777,9 @@ function openTreeContextMenu(target) {
     }
 
     const menuWidth = 180;
-    const menuHeight = canMutate ? 90 : 120;
+    const menuHeight = canMutate
+        ? (target.type === 'file' ? 126 : 90)
+        : (target.type === 'file' ? 156 : 120);
     const maxLeft = Math.max(8, window.innerWidth - menuWidth - 8);
     const maxTop = Math.max(8, window.innerHeight - menuHeight - 8);
     const left = Math.min(Math.max(8, target.x), maxLeft);
@@ -822,6 +833,15 @@ async function handleTreeContextDelete() {
         await deleteFileById(treeContextTarget.id);
     }
     closeTreeContextMenu();
+}
+
+function handleTreeContextCopy() {
+    if (!treeContextTarget || !treeMutationsEnabled) return;
+    if (treeContextTarget.type !== 'file') return;
+
+    const targetFileId = treeContextTarget.id;
+    closeTreeContextMenu();
+    void duplicateFileById(targetFileId);
 }
 
 async function renameFolderById(id) {
@@ -1089,6 +1109,97 @@ async function moveFileById(id, targetFolderId) {
     persist();
     if (workspace.uiState.activeFileId === file.id) {
         loadActiveFile();
+    }
+}
+
+function createCopiedFileName(originalName) {
+    const name = String(originalName || '').trim();
+    if (!name) return 'untitled-copy.json';
+
+    const dotIndex = name.lastIndexOf('.');
+    if (dotIndex <= 0) {
+        return `${name}-copy`;
+    }
+
+    const base = name.slice(0, dotIndex);
+    const ext = name.slice(dotIndex);
+    return `${base}-copy${ext}`;
+}
+
+async function duplicateFileById(id) {
+    const sourceFile = Workspace.getFileById(workspace, id);
+    if (!sourceFile) return;
+
+    const duplicatedBaseName = createCopiedFileName(sourceFile.name);
+    const nextName = Workspace.getNextAvailableFileName(workspace, sourceFile.folderId, duplicatedBaseName);
+    const duplicatedFile = Workspace.createFileRecord(sourceFile.folderId, nextName, sourceFile.content || '');
+    const directoryMode = isDirectoryWritableMode();
+
+    workspace.files.push(duplicatedFile);
+    workspace.uiState.activeFileId = duplicatedFile.id;
+    workspace.uiState.selectedFolderId = sourceFile.folderId;
+    workspace.uiState.selectedFileId = duplicatedFile.id;
+    workspace.uiState.lastSelectionType = 'file';
+    lastTreeSelectionType = 'file';
+
+    if (!directoryMode) {
+        persist();
+        loadActiveFile();
+        return;
+    }
+
+    pendingCopyFileIds.add(duplicatedFile.id);
+    renderTree();
+    loadActiveFile();
+
+    const folderHandle = directoryHandleByFolderId.get(sourceFile.folderId);
+    if (!folderHandle) {
+        pendingCopyFileIds.delete(duplicatedFile.id);
+        workspace.files = workspace.files.filter((file) => file.id !== duplicatedFile.id);
+        if (workspace.uiState.activeFileId === duplicatedFile.id) {
+            workspace.uiState.activeFileId = sourceFile.id;
+        }
+        if (workspace.uiState.selectedFileId === duplicatedFile.id) {
+            workspace.uiState.selectedFileId = sourceFile.id;
+        }
+        workspace.uiState.selectedFolderId = sourceFile.folderId;
+        workspace.uiState.lastSelectionType = 'file';
+        lastTreeSelectionType = 'file';
+        persist();
+        loadActiveFile();
+        alert('디스크 파일 복사에 필요한 폴더 핸들을 찾지 못했습니다.');
+        return;
+    }
+
+    try {
+        const fileHandle = await folderHandle.getFileHandle(nextName, { create: true });
+        const writable = await fileHandle.createWritable();
+        await writable.write(duplicatedFile.content || '');
+        await writable.close();
+        const diskFile = await fileHandle.getFile();
+        directoryFileHandleById.set(duplicatedFile.id, fileHandle);
+        directoryFileFingerprintById.set(duplicatedFile.id, buildFileFingerprint(diskFile));
+        pendingCopyFileIds.delete(duplicatedFile.id);
+        persist();
+        loadActiveFile();
+    } catch (error) {
+        pendingCopyFileIds.delete(duplicatedFile.id);
+        workspace.files = workspace.files.filter((file) => file.id !== duplicatedFile.id);
+        directoryFileHandleById.delete(duplicatedFile.id);
+        directoryFileFingerprintById.delete(duplicatedFile.id);
+        if (workspace.uiState.activeFileId === duplicatedFile.id) {
+            workspace.uiState.activeFileId = sourceFile.id;
+        }
+        if (workspace.uiState.selectedFileId === duplicatedFile.id) {
+            workspace.uiState.selectedFileId = sourceFile.id;
+        }
+        workspace.uiState.selectedFolderId = sourceFile.folderId;
+        workspace.uiState.lastSelectionType = 'file';
+        lastTreeSelectionType = 'file';
+        persist();
+        loadActiveFile();
+        console.error('[qa-scenario] failed to duplicate file on disk', error);
+        alert('디스크 파일 복사에 실패했습니다.');
     }
 }
 
@@ -2106,6 +2217,9 @@ function setupWindowListeners() {
     });
     if (EL.treeContextRename) {
         EL.treeContextRename.addEventListener('click', handleTreeContextRename);
+    }
+    if (EL.treeContextCopy) {
+        EL.treeContextCopy.addEventListener('click', handleTreeContextCopy);
     }
     if (EL.treeContextDelete) {
         EL.treeContextDelete.addEventListener('click', handleTreeContextDelete);

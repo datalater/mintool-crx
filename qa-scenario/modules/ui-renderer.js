@@ -79,6 +79,7 @@ export function renderFileTree(container, workspace, options = {}) {
         showInlineActions,
         onOpenContextMenu,
         onMoveFile,
+        pendingCopyFileIds,
         onToggleFolder, 
         onSelectFile, 
         onRenameFolder, 
@@ -99,6 +100,9 @@ export function renderFileTree(container, workspace, options = {}) {
         ? workspace.uiState.selectedFileId
         : null;
     const expandedSet = new Set(workspace.uiState.expandedFolderIds || []);
+    const pendingCopySet = pendingCopyFileIds instanceof Set
+        ? pendingCopyFileIds
+        : new Set(Array.isArray(pendingCopyFileIds) ? pendingCopyFileIds : []);
     const canDragMove = Boolean(canMutateTree && typeof onMoveFile === 'function');
     const DRAG_FILE_MIME = 'application/x-qa-scenario-file-id';
     let draggingFileId = '';
@@ -262,8 +266,10 @@ export function renderFileTree(container, workspace, options = {}) {
                     fileRow.className = 'tree-file-row';
                     fileRow.style.paddingLeft = `${28 + (depth * 16)}px`;
                     const isActive = activeFile && activeFile.id === file.id;
+                    const isPendingCopy = pendingCopySet.has(file.id);
                     if (file.id === selectedFileId) fileRow.classList.add('is-selected');
                     if (isActive) fileRow.classList.add('is-open');
+                    if (isPendingCopy) fileRow.classList.add('is-pending-copy');
 
                     const openIndicator = document.createElement('span');
                     openIndicator.className = `tree-open-indicator${isActive ? ' is-active' : ''}`;
@@ -289,6 +295,12 @@ export function renderFileTree(container, workspace, options = {}) {
                     fileRow.appendChild(openIndicator);
                     fileRow.appendChild(fileIcon);
                     fileRow.appendChild(fileName);
+                    if (isPendingCopy) {
+                        const pendingBadge = document.createElement('span');
+                        pendingBadge.className = 'tree-copy-pending-badge';
+                        pendingBadge.textContent = '복사 중...';
+                        fileRow.appendChild(pendingBadge);
+                    }
                     if (fileActions) {
                         fileRow.appendChild(fileActions);
                     }
