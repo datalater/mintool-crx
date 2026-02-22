@@ -1173,6 +1173,12 @@ tr.checklist-divider-row td {
     color: #f85149;
 }
 
+.status-badge.idle {
+    background: rgba(139, 148, 158, 0.2);
+    border-color: rgba(139, 148, 158, 0.45);
+    color: #8b949e;
+}
+
 /* Custom Checkbox */
 .checkbox-container {
     display: block;

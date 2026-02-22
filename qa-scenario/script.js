@@ -422,14 +422,53 @@ function persist() {
 
 function loadActiveFile() {
     clearStepHighlight();
-    const activeFile = Workspace.getActiveFile(workspace);
-    EL.editing.value = activeFile ? activeFile.content : '';
-    validateAndRender();
+    const activeFile = resolveActiveFileOrFallback();
+    if (!activeFile) {
+        renderNoFileSelectedState();
+    } else {
+        EL.editing.value = activeFile.content;
+        validateAndRender();
+    }
     renderTree();
     updateSaveIndicator('saved');
     activeFileDirty = false;
     editorCursorHistoryManager.reset();
     editorFindReplaceManager.syncFromEditorInput();
+}
+
+function resolveActiveFileOrFallback() {
+    const active = Workspace.getActiveFile(workspace);
+    if (active) return active;
+    if (!workspace?.files?.length) return null;
+
+    const fallback = workspace.files[0];
+    workspace.uiState.activeFileId = fallback.id;
+    workspace.uiState.selectedFileId = fallback.id;
+    workspace.uiState.selectedFolderId = fallback.folderId;
+    workspace.uiState.lastSelectionType = 'file';
+    lastTreeSelectionType = 'file';
+    return fallback;
+}
+
+function renderNoFileSelectedState() {
+    currentData = null;
+    EL.editing.value = '';
+    updateLineNumbers();
+    updateHighlighting();
+    updateErrorPosition(-1);
+    updateErrorMessage('');
+    setJsonValidationIdleState('No file');
+
+    if (EL.checklistBody) {
+        EL.checklistBody.innerHTML = '<tr class="empty-state"><td colspan="5">Select a file or create a new file.</td></tr>';
+    }
+
+    if (EL.scenarioTitle) {
+        const title = 'No file selected';
+        EL.scenarioTitle.textContent = title;
+        EL.scenarioTitle.title = title;
+        EL.scenarioTitle.classList.remove('is-primary');
+    }
 }
 
 // --- Logic ---
@@ -648,6 +687,10 @@ function renderEditorFindWidget(state) {
 }
 
 function runFormatAndSave() {
+    if (!Workspace.getActiveFile(workspace)) {
+        setJsonValidationIdleState('No file');
+        return;
+    }
     try {
         const selectionSnapshot = captureEditorSelectionSnapshot(EL.editing);
         EL.editing.value = JSON.stringify(JSON.parse(EL.editing.value), null, 2);
@@ -807,6 +850,47 @@ function getDescendantFolderIds(rootFolderId) {
         });
     }
     return descendants;
+}
+
+function compareFileNameForSelection(a, b) {
+    return a.name.localeCompare(b.name, 'en', { sensitivity: 'base', numeric: true });
+}
+
+function pickFallbackFileAfterDelete(deletedFile, remainingFiles) {
+    if (!deletedFile || !Array.isArray(remainingFiles) || remainingFiles.length === 0) {
+        return null;
+    }
+
+    const inSameFolder = remainingFiles
+        .filter((file) => file.folderId === deletedFile.folderId)
+        .sort(compareFileNameForSelection);
+
+    const nextInFolder = inSameFolder.find((file) => compareFileNameForSelection(file, deletedFile) > 0);
+    if (nextInFolder) return nextInFolder;
+
+    for (let index = inSameFolder.length - 1; index >= 0; index -= 1) {
+        const candidate = inSameFolder[index];
+        if (compareFileNameForSelection(candidate, deletedFile) < 0) {
+            return candidate;
+        }
+    }
+
+    const sortedAll = [...remainingFiles].sort((a, b) => {
+        const folderA = Workspace.getFolderById(workspace, a.folderId);
+        const folderB = Workspace.getFolderById(workspace, b.folderId);
+        const pathA = folderA?.path || folderA?.name || '';
+        const pathB = folderB?.path || folderB?.name || '';
+
+        const folderCompare = pathA.localeCompare(pathB, 'en', { sensitivity: 'base', numeric: true });
+        if (folderCompare !== 0) return folderCompare;
+
+        const nameCompare = compareFileNameForSelection(a, b);
+        if (nameCompare !== 0) return nameCompare;
+
+        return a.id.localeCompare(b.id, 'en', { sensitivity: 'base', numeric: true });
+    });
+
+    return sortedAll[0] || null;
 }
 
 function closeTreeContextMenu() {
@@ -1035,14 +1119,30 @@ async function deleteFileById(id) {
     }
 
     const deletedIndex = workspace.files.findIndex((item) => item.id === id);
-    if (deletedIndex >= 0) {
-        deletedFileHistoryManager.recordDeletedFile(workspace.files[deletedIndex], deletedIndex);
+    const deletedFile = deletedIndex >= 0 ? workspace.files[deletedIndex] : null;
+    if (deletedFile) {
+        deletedFileHistoryManager.recordDeletedFile(deletedFile, deletedIndex);
     }
     workspace.files = workspace.files.filter((item) => item.id !== id);
+    const fallbackFile = pickFallbackFileAfterDelete(deletedFile, workspace.files);
+
     directoryFileHandleById.delete(id);
     directoryFileFingerprintById.delete(id);
-    if (workspace.uiState.selectedFileId === id) workspace.uiState.selectedFileId = null;
-    if (workspace.uiState.activeFileId === id) workspace.uiState.activeFileId = null;
+
+    if (workspace.uiState.activeFileId === id) {
+        workspace.uiState.activeFileId = fallbackFile ? fallbackFile.id : null;
+    }
+
+    if (workspace.uiState.selectedFileId === id) {
+        workspace.uiState.selectedFileId = fallbackFile ? fallbackFile.id : null;
+    }
+
+    if (fallbackFile) {
+        workspace.uiState.selectedFolderId = fallbackFile.folderId;
+        workspace.uiState.lastSelectionType = 'file';
+        lastTreeSelectionType = 'file';
+    }
+
     persist();
     loadActiveFile();
 }
@@ -2143,6 +2243,7 @@ function renderEditorFromCurrentData() {
 }
 
 function setJsonValidationValidState() {
+    EL.jsonStatus.classList.remove('idle');
     setJsonValidationValidView(
         EL.jsonStatus,
         () => updateErrorPosition(-1),
@@ -2151,7 +2252,15 @@ function setJsonValidationValidState() {
 }
 
 function setJsonValidationErrorState(label) {
+    EL.jsonStatus.classList.remove('idle');
     setJsonValidationErrorView(EL.jsonStatus, label);
+}
+
+function setJsonValidationIdleState(label = 'No file') {
+    if (!EL.jsonStatus) return;
+    EL.jsonStatus.textContent = label;
+    EL.jsonStatus.classList.remove('error');
+    EL.jsonStatus.classList.add('idle');
 }
 
 function updateErrorMessage(message) {
