@@ -1113,6 +1113,14 @@ mark.json-error {
     margin: 0;
 }
 
+mark.json-search-hit {
+    background-color: rgba(255, 208, 79, 0.28);
+    color: inherit;
+    border-radius: 2px;
+    padding: 0;
+    margin: 0;
+}
+
 /* Checklist Table */
 .checklist-container {
     flex: 1;

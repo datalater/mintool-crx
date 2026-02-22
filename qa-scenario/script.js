@@ -154,6 +154,8 @@ let directoryFlushQueued = false;
 let treeContextTarget = null;
 const pendingCopyFileIds = new Set();
 let fileTreeSearchQuery = '';
+let currentFileTreeSearchState = null;
+let editorSearchHighlightQuery = '';
 
 const BOUND_FILE_PATH_DEFAULT_LABEL = '';
 const BOUND_FILE_PATH_DEFAULT_TOOLTIP = 'No file bound';
@@ -428,10 +430,16 @@ function loadActiveFile() {
     clearStepHighlight();
     const activeFile = resolveActiveFileOrFallback();
     if (!activeFile) {
+        editorSearchHighlightQuery = '';
         renderNoFileSelectedState();
     } else {
+        const searchMatch = applyEditorSearchHighlightForFile(activeFile.id);
         EL.editing.value = activeFile.content;
         validateAndRender();
+        if (searchMatch && Number.isFinite(searchMatch.firstMatchIndex) && searchMatch.firstMatchIndex >= 0) {
+            scrollToLine(searchMatch.firstMatchIndex);
+            syncScroll();
+        }
     }
     renderTree();
     updateSaveIndicator('saved');
@@ -718,7 +726,7 @@ function updateActiveFileFromEditor() {
 }
 
 function updateHighlighting(errorPos = -1) {
-    EL.highlightContent.innerHTML = Editor.syntaxHighlight(EL.editing.value, errorPos);
+    EL.highlightContent.innerHTML = Editor.syntaxHighlight(EL.editing.value, errorPos, editorSearchHighlightQuery);
     syncScroll();
 }
 
@@ -805,13 +813,41 @@ function buildFileTreeSearchState(query) {
         state.matchesByFileId.set(file.id, {
             nameMatched,
             contentMatchCount,
-            snippet
+            snippet,
+            firstMatchIndex
         });
         state.matchedFileCount += 1;
         state.totalMatchCount += (nameMatched ? 1 : 0) + contentMatchCount;
     });
 
     return state;
+}
+
+function getCurrentFileTreeSearchState() {
+    const normalizedQuery = normalizeFileTreeSearchQuery(fileTreeSearchQuery);
+    if (!normalizedQuery) {
+        currentFileTreeSearchState = {
+            query: '',
+            matchesByFileId: new Map(),
+            matchedFileCount: 0,
+            totalMatchCount: 0
+        };
+        return currentFileTreeSearchState;
+    }
+    currentFileTreeSearchState = buildFileTreeSearchState(normalizedQuery);
+    return currentFileTreeSearchState;
+}
+
+function applyEditorSearchHighlightForFile(fileId) {
+    if (!fileId) {
+        editorSearchHighlightQuery = '';
+        return null;
+    }
+
+    const searchState = getCurrentFileTreeSearchState();
+    const match = searchState.matchesByFileId.get(fileId) || null;
+    editorSearchHighlightQuery = match ? searchState.query : '';
+    return match;
 }
 
 function updateTreeSearchMeta(searchState) {
@@ -834,9 +870,19 @@ function updateTreeSearchMeta(searchState) {
     EL.treeSearchMeta.textContent = `${searchState.matchedFileCount} files / ${searchState.totalMatchCount} matches`;
 }
 
+function refreshEditorSearchHighlightForActiveFile() {
+    const activeFile = Workspace.getActiveFile(workspace);
+    const activeFileId = activeFile?.id || null;
+    applyEditorSearchHighlightForFile(activeFileId);
+    if (activeFileId) {
+        validateAndRender();
+    }
+}
+
 function handleTreeSearchInput(event) {
     fileTreeSearchQuery = normalizeFileTreeSearchQuery(event?.target?.value);
     renderTree();
+    refreshEditorSearchHighlightForActiveFile();
 }
 
 function clearTreeSearch() {
@@ -847,6 +893,7 @@ function clearTreeSearch() {
         EL.treeSearchInput.focus();
     }
     renderTree();
+    refreshEditorSearchHighlightForActiveFile();
 }
 
 function handleTreeSearchKeydown(event) {
@@ -856,7 +903,7 @@ function handleTreeSearchKeydown(event) {
 }
 
 function renderTree() {
-    const fileSearchState = buildFileTreeSearchState(fileTreeSearchQuery);
+    const fileSearchState = getCurrentFileTreeSearchState();
     const treeOptions = buildTreeRenderOptions({
         getWorkspace: () => workspace,
         getActiveFileDirty: () => activeFileDirty,
