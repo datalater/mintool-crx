@@ -357,6 +357,7 @@ body {
 }
 
 .file-tree-panel.is-collapsed .tree-toolbar-left,
+.file-tree-panel.is-collapsed .tree-search,
 .file-tree-panel.is-collapsed .tree-view {
     display: none;
 }
@@ -385,6 +386,67 @@ body {
     gap: 6px;
     padding: 8px;
     border-bottom: 1px solid var(--border-muted);
+}
+
+.tree-search {
+    padding: 8px;
+    border-bottom: 1px solid var(--border-muted);
+    border-top: 1px solid var(--border-muted);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.tree-search-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.tree-search-input {
+    width: 100%;
+    min-height: 28px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    background: var(--editor-bg);
+    color: var(--text-primary);
+    padding: 4px 8px;
+    font-size: 12px;
+}
+
+.tree-search-input:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 2px rgba(56, 139, 253, 0.2);
+}
+
+.tree-search-clear {
+    appearance: none;
+    border: 1px solid var(--border-color);
+    background-color: rgba(33, 38, 45, 0.95);
+    color: var(--text-secondary);
+    border-radius: 6px;
+    font-size: 11px;
+    line-height: 18px;
+    font-weight: 500;
+    padding: 2px 8px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.tree-search-clear:hover {
+    color: var(--text-primary);
+    border-color: #8b949e;
+    background-color: #30363d;
+}
+
+.tree-search-meta {
+    min-height: 14px;
+    font-size: 11px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .tree-toolbar-left {
@@ -578,6 +640,53 @@ body {
 
 .tree-file-row {
     padding-left: 28px;
+}
+
+.tree-file-row.has-search-snippet {
+    align-items: flex-start;
+}
+
+.tree-file-text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.tree-search-snippet {
+    font-size: 10px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 14px;
+    margin-top: 1px;
+}
+
+.tree-search-badges {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+    flex: 0 0 auto;
+}
+
+.tree-search-badge {
+    font-size: 10px;
+    line-height: 14px;
+    padding: 0 5px;
+    border-radius: 999px;
+    border: 1px solid rgba(88, 166, 255, 0.45);
+    color: #79c0ff;
+    background: rgba(56, 139, 253, 0.16);
+    white-space: nowrap;
+}
+
+.tree-search-hit {
+    background: rgba(255, 208, 79, 0.25);
+    color: #ffd24a;
+    border-radius: 3px;
+    padding: 0 1px;
 }
 
 .tree-file-row.is-pending-copy {

@@ -85,6 +85,9 @@ const EL = {
     btnTreeMenu: document.getElementById('btn-tree-menu'),
     btnShowTree: document.getElementById('btn-show-tree'),
     treeMenu: document.getElementById('tree-menu'),
+    treeSearchInput: document.getElementById('tree-search-input'),
+    treeSearchMeta: document.getElementById('tree-search-meta'),
+    btnTreeSearchClear: document.getElementById('btn-tree-search-clear'),
     fileTree: document.getElementById('file-tree'),
     treeContextMenu: document.getElementById('tree-context-menu'),
     treeContextCopy: document.getElementById('tree-context-copy'),
@@ -150,6 +153,7 @@ let directoryFlushInFlight = false;
 let directoryFlushQueued = false;
 let treeContextTarget = null;
 const pendingCopyFileIds = new Set();
+let fileTreeSearchQuery = '';
 
 const BOUND_FILE_PATH_DEFAULT_LABEL = '';
 const BOUND_FILE_PATH_DEFAULT_TOOLTIP = 'No file bound';
@@ -746,7 +750,113 @@ function applyErrorPosition(position) {
     updateErrorPosition(normalized);
 }
 
+function normalizeFileTreeSearchQuery(value) {
+    return String(value || '').trim();
+}
+
+function buildSearchSnippet(source, startIndex, queryLength) {
+    if (!source) return '';
+    const raw = String(source);
+    const context = 26;
+    const start = Math.max(0, startIndex - context);
+    const end = Math.min(raw.length, startIndex + queryLength + context);
+    const sliced = raw.slice(start, end).replace(/\s+/g, ' ').trim();
+    if (!sliced) return '';
+    const prefix = start > 0 ? '...' : '';
+    const suffix = end < raw.length ? '...' : '';
+    return `${prefix}${sliced}${suffix}`;
+}
+
+function buildFileTreeSearchState(query) {
+    const normalizedQuery = normalizeFileTreeSearchQuery(query);
+    const state = {
+        query: normalizedQuery,
+        matchesByFileId: new Map(),
+        matchedFileCount: 0,
+        totalMatchCount: 0
+    };
+
+    if (!normalizedQuery) return state;
+    const queryLower = normalizedQuery.toLowerCase();
+
+    workspace.files.forEach((file) => {
+        const fileName = String(file.name || '');
+        const content = String(file.content || '');
+        const nameMatched = fileName.toLowerCase().includes(queryLower);
+
+        const contentLower = content.toLowerCase();
+        let contentMatchCount = 0;
+        let firstMatchIndex = -1;
+        let cursor = 0;
+        while (cursor <= contentLower.length) {
+            const foundIndex = contentLower.indexOf(queryLower, cursor);
+            if (foundIndex < 0) break;
+            if (firstMatchIndex < 0) firstMatchIndex = foundIndex;
+            contentMatchCount += 1;
+            cursor = foundIndex + Math.max(1, queryLower.length);
+        }
+
+        if (!nameMatched && contentMatchCount === 0) return;
+
+        const snippet = firstMatchIndex >= 0
+            ? buildSearchSnippet(content, firstMatchIndex, queryLower.length)
+            : '';
+
+        state.matchesByFileId.set(file.id, {
+            nameMatched,
+            contentMatchCount,
+            snippet
+        });
+        state.matchedFileCount += 1;
+        state.totalMatchCount += (nameMatched ? 1 : 0) + contentMatchCount;
+    });
+
+    return state;
+}
+
+function updateTreeSearchMeta(searchState) {
+    if (!EL.treeSearchMeta || !EL.btnTreeSearchClear) return;
+    const query = searchState?.query || '';
+    const hasQuery = query.length > 0;
+
+    EL.btnTreeSearchClear.hidden = !hasQuery;
+
+    if (!hasQuery) {
+        EL.treeSearchMeta.textContent = '';
+        return;
+    }
+
+    if (searchState.matchedFileCount === 0) {
+        EL.treeSearchMeta.textContent = `No matches for "${query}"`;
+        return;
+    }
+
+    EL.treeSearchMeta.textContent = `${searchState.matchedFileCount} files / ${searchState.totalMatchCount} matches`;
+}
+
+function handleTreeSearchInput(event) {
+    fileTreeSearchQuery = normalizeFileTreeSearchQuery(event?.target?.value);
+    renderTree();
+}
+
+function clearTreeSearch() {
+    if (!fileTreeSearchQuery) return;
+    fileTreeSearchQuery = '';
+    if (EL.treeSearchInput) {
+        EL.treeSearchInput.value = '';
+        EL.treeSearchInput.focus();
+    }
+    renderTree();
+}
+
+function handleTreeSearchKeydown(event) {
+    if (event.key !== 'Escape') return;
+    event.preventDefault();
+    clearTreeSearch();
+}
+
 function renderTree() {
+    const fileSearchState = buildFileTreeSearchState(fileTreeSearchQuery);
     const treeOptions = buildTreeRenderOptions({
         getWorkspace: () => workspace,
         getActiveFileDirty: () => activeFileDirty,
@@ -764,7 +874,9 @@ function renderTree() {
         onMoveFile: (fileId, targetFolderId) => moveFileById(fileId, targetFolderId)
     });
     treeOptions.pendingCopyFileIds = pendingCopyFileIds;
+    treeOptions.fileSearchState = fileSearchState;
     UI.renderFileTree(EL.fileTree, workspace, treeOptions);
+    updateTreeSearchMeta(fileSearchState);
     updateFolderToggleButtonState();
 }
 
@@ -2443,6 +2555,14 @@ function setupEventListeners() {
             alert('Open failed');
         }
     });
+
+    if (EL.treeSearchInput) {
+        EL.treeSearchInput.addEventListener('input', handleTreeSearchInput);
+        EL.treeSearchInput.addEventListener('keydown', handleTreeSearchKeydown);
+    }
+    if (EL.btnTreeSearchClear) {
+        EL.btnTreeSearchClear.addEventListener('click', clearTreeSearch);
+    }
 }
 
 function handleDocumentKeydown(event) {

@@ -85,6 +85,7 @@ export function renderFileTree(container, workspace, options = {}) {
         onOpenContextMenu,
         onMoveFile,
         pendingCopyFileIds,
+        fileSearchState,
         onToggleFolder, 
         onSelectFile, 
         onRenameFolder, 
@@ -108,6 +109,12 @@ export function renderFileTree(container, workspace, options = {}) {
     const pendingCopySet = pendingCopyFileIds instanceof Set
         ? pendingCopyFileIds
         : new Set(Array.isArray(pendingCopyFileIds) ? pendingCopyFileIds : []);
+    const searchQuery = String(fileSearchState?.query || '').trim();
+    const hasSearchQuery = searchQuery.length > 0;
+    const searchNeedle = searchQuery.toLowerCase();
+    const searchMatchesByFileId = fileSearchState?.matchesByFileId instanceof Map
+        ? fileSearchState.matchesByFileId
+        : new Map();
     const canDragMove = Boolean(canMutateTree && typeof onMoveFile === 'function');
     const DRAG_FILE_MIME = 'application/x-qa-scenario-file-id';
     let draggingFileId = '';
@@ -137,6 +144,49 @@ export function renderFileTree(container, workspace, options = {}) {
 
     const byName = (a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base', numeric: true });
 
+    const visibleFolderIds = new Set();
+    if (hasSearchQuery) {
+        workspace.files.forEach((file) => {
+            if (!searchMatchesByFileId.has(file.id)) return;
+            let cursor = file.folderId;
+            while (cursor) {
+                if (visibleFolderIds.has(cursor)) break;
+                visibleFolderIds.add(cursor);
+                const parentFolder = folderById.get(cursor);
+                cursor = parentFolder?.parentId || null;
+            }
+        });
+    }
+
+    const appendHighlightedText = (target, sourceText) => {
+        target.textContent = '';
+        const text = String(sourceText || '');
+        if (!hasSearchQuery || !searchNeedle) {
+            target.textContent = text;
+            return;
+        }
+
+        const lowered = text.toLowerCase();
+        let cursor = 0;
+        while (cursor < text.length) {
+            const found = lowered.indexOf(searchNeedle, cursor);
+            if (found < 0) {
+                target.appendChild(document.createTextNode(text.slice(cursor)));
+                break;
+            }
+
+            if (found > cursor) {
+                target.appendChild(document.createTextNode(text.slice(cursor, found)));
+            }
+
+            const mark = document.createElement('mark');
+            mark.className = 'tree-search-hit';
+            mark.textContent = text.slice(found, found + searchNeedle.length);
+            target.appendChild(mark);
+            cursor = found + searchNeedle.length;
+        }
+    };
+
     const getDraggedFileId = (dataTransfer) => {
         if (!dataTransfer || typeof dataTransfer.getData !== 'function') return '';
         return dataTransfer.getData(DRAG_FILE_MIME) || dataTransfer.getData('text/plain') || '';
@@ -162,6 +212,10 @@ export function renderFileTree(container, workspace, options = {}) {
     };
 
     const renderFolder = (folder, depth = 0) => {
+        if (hasSearchQuery && !visibleFolderIds.has(folder.id)) {
+            return null;
+        }
+
         const folderWrap = document.createElement('div');
         folderWrap.className = 'tree-folder';
 
@@ -173,7 +227,7 @@ export function renderFileTree(container, workspace, options = {}) {
         if (folder.id === activeFolderId) folderRow.classList.add('active-parent');
         if (folder.id === selectedFolderId) folderRow.classList.add('active-target');
 
-        const isExpanded = expandedSet.has(folder.id);
+        const isExpanded = hasSearchQuery ? true : expandedSet.has(folder.id);
         const chevron = document.createElement('span');
         chevron.className = 'tree-chevron';
         chevron.textContent = isExpanded ? '▾' : '▸';
@@ -252,12 +306,19 @@ export function renderFileTree(container, workspace, options = {}) {
             const fileList = document.createElement('div');
             fileList.className = 'tree-file-list';
 
-            const childFolders = (childFoldersByParentId.get(folder.id) || []).sort(byName);
+            const childFolders = (childFoldersByParentId.get(folder.id) || [])
+                .sort(byName)
+                .filter((childFolder) => !hasSearchQuery || visibleFolderIds.has(childFolder.id));
             childFolders.forEach((childFolder) => {
-                fileList.appendChild(renderFolder(childFolder, depth + 1));
+                const childNode = renderFolder(childFolder, depth + 1);
+                if (childNode) {
+                    fileList.appendChild(childNode);
+                }
             });
 
-            const files = (filesByFolderId.get(folder.id) || []).sort(byName);
+            const files = (filesByFolderId.get(folder.id) || [])
+                .sort(byName)
+                .filter((file) => !hasSearchQuery || searchMatchesByFileId.has(file.id));
 
             if (files.length === 0 && childFolders.length === 0) {
                 const empty = document.createElement('div');
@@ -282,11 +343,26 @@ export function renderFileTree(container, workspace, options = {}) {
                     const fileIcon = document.createElement('span');
                     fileIcon.className = 'tree-icon tree-icon-file';
 
+                    const fileTextWrap = document.createElement('span');
+                    fileTextWrap.className = 'tree-file-text';
+
                     const fileName = document.createElement('span');
                     fileName.className = 'tree-name';
+
                     const visibleFileName = `${file.name}${isActive && activeFileDirty ? ' *' : ''}`;
-                    fileName.textContent = visibleFileName;
                     fileName.title = visibleFileName;
+                    appendHighlightedText(fileName, visibleFileName);
+                    fileTextWrap.appendChild(fileName);
+
+                    const matchInfo = searchMatchesByFileId.get(file.id);
+                    const hasContentSnippet = Boolean(hasSearchQuery && matchInfo?.snippet);
+                    if (hasContentSnippet) {
+                        fileRow.classList.add('has-search-snippet');
+                        const snippet = document.createElement('span');
+                        snippet.className = 'tree-search-snippet';
+                        appendHighlightedText(snippet, matchInfo.snippet);
+                        fileTextWrap.appendChild(snippet);
+                    }
 
                     const fileActionItems = [];
                     if (showInlineActions && canMutateTree && typeof onRenameFile === 'function') {
@@ -297,14 +373,32 @@ export function renderFileTree(container, workspace, options = {}) {
                     }
                     const fileActions = createTreeRowActions(fileActionItems);
 
+                    const searchBadges = document.createElement('span');
+                    searchBadges.className = 'tree-search-badges';
+                    if (hasSearchQuery && matchInfo?.nameMatched) {
+                        const nameBadge = document.createElement('span');
+                        nameBadge.className = 'tree-search-badge';
+                        nameBadge.textContent = 'Name';
+                        searchBadges.appendChild(nameBadge);
+                    }
+                    if (hasSearchQuery && Number(matchInfo?.contentMatchCount) > 0) {
+                        const contentBadge = document.createElement('span');
+                        contentBadge.className = 'tree-search-badge';
+                        contentBadge.textContent = `Content ${matchInfo.contentMatchCount}`;
+                        searchBadges.appendChild(contentBadge);
+                    }
+
                     fileRow.appendChild(openIndicator);
                     fileRow.appendChild(fileIcon);
-                    fileRow.appendChild(fileName);
+                    fileRow.appendChild(fileTextWrap);
                     if (isPendingCopy) {
                         const pendingBadge = document.createElement('span');
                         pendingBadge.className = 'tree-copy-pending-badge';
                         pendingBadge.textContent = '복사 중...';
                         fileRow.appendChild(pendingBadge);
+                    }
+                    if (searchBadges.childElementCount > 0) {
+                        fileRow.appendChild(searchBadges);
                     }
                     if (fileActions) {
                         fileRow.appendChild(fileActions);
@@ -346,10 +440,21 @@ export function renderFileTree(container, workspace, options = {}) {
         return folderWrap;
     };
 
+    if (hasSearchQuery && searchMatchesByFileId.size === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'tree-empty';
+        empty.textContent = `No matching files for "${searchQuery}"`;
+        container.appendChild(empty);
+        return;
+    }
+
     rootFolders
         .sort(byName)
         .forEach((folder) => {
-            container.appendChild(renderFolder(folder));
+            const folderNode = renderFolder(folder);
+            if (folderNode) {
+                container.appendChild(folderNode);
+            }
         });
 }
 
