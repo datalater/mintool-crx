@@ -1111,6 +1111,7 @@ tr.checklist-divider-row td {
     border-radius: 4px;
     transition: background-color 120ms ease, box-shadow 120ms ease;
     word-break: normal;
+    overflow-wrap: anywhere;
     white-space: pre-wrap;
     outline: none;
     cursor: text;
