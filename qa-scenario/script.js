@@ -1688,7 +1688,7 @@ async function handleBindOpenClick(event) {
     const forceFileOpen = Boolean(event?.shiftKey);
     if (!forceFileOpen && typeof window.showDirectoryPicker === 'function') {
         try {
-            const directoryHandle = await window.showDirectoryPicker({ mode: 'read' });
+            const directoryHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
             if (!directoryHandle) return;
             await bindAndLoadFromDirectoryHandle(directoryHandle);
             return;
@@ -1731,10 +1731,34 @@ async function handleBindOpenFileClick() {
 
 async function bindAndLoadFromDirectoryHandle(handle, options = {}) {
     const isRestore = options?.isRestore === true;
-    const readGranted = await ensureDirectoryReadPermission(handle, {
-        interactive: !isRestore,
-        silent: isRestore
-    });
+    let writeGranted = false;
+    let readGranted = false;
+
+    if (isRestore) {
+        readGranted = await ensureDirectoryReadPermission(handle, {
+            interactive: false,
+            silent: true
+        });
+        writeGranted = await ensureDirectoryReadWritePermission(handle, {
+            interactive: false,
+            silent: true
+        });
+    } else {
+        writeGranted = await ensureDirectoryReadWritePermission(handle, {
+            interactive: true,
+            silent: false
+        });
+
+        if (writeGranted) {
+            readGranted = true;
+        } else {
+            readGranted = await ensureDirectoryReadPermission(handle, {
+                interactive: false,
+                silent: false
+            });
+        }
+    }
+
     if (!readGranted) {
         if (isRestore) {
             updateBoundFilePathInput('Not connected: re-open folder to load disk tree', 'warning');
@@ -1757,11 +1781,6 @@ async function bindAndLoadFromDirectoryHandle(handle, options = {}) {
         alert('Unsupported or invalid directory contents');
         return false;
     }
-
-    const writeGranted = await ensureDirectoryReadWritePermission(handle, {
-        interactive: !isRestore,
-        silent: isRestore
-    });
 
     clearBoundFile({ clearPersistedDirectoryHandle: false });
     boundDirectoryHandle = handle;
