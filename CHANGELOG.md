@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented in this file.
 
+## [2.2.4] - 2026-02-22
+
+### Added
+- File-duplicate action in QA Scenario tree context menu (`파일 복사`) with `-copy` naming and same-content duplication.
+- File-tree search bar above the tree with filename/content matching, snippet preview, match badges, and clear action.
+- Editor-side search hit highlighting when opening files from tree search results, including auto-scroll to the first match.
+- Unit tests for editor search-highlight rendering.
+
+### Changed
+- Folder open flow now requests writable directory access in a single upfront approval path to reduce repeated permission prompts.
+- Divider rows in Checklist UI are now editable, with a dedicated non-edit left click area for easier row selection.
+- Improved wrapping behavior for long table cell text via `overflow-wrap: anywhere`.
+
+### Fixed
+- Deleting a file now selects a predictable fallback file when available.
+- When no files remain, editor/checklist now shows a clear idle empty state instead of invalid JSON noise.
+- File copy UX now closes context menu immediately and shows in-tree loading state while disk duplication completes.
+
 ## [2.2.3] - 2026-02-20
 
 ### Added

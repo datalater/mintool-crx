@@ -85,8 +85,12 @@ const EL = {
     btnTreeMenu: document.getElementById('btn-tree-menu'),
     btnShowTree: document.getElementById('btn-show-tree'),
     treeMenu: document.getElementById('tree-menu'),
+    treeSearchInput: document.getElementById('tree-search-input'),
+    treeSearchMeta: document.getElementById('tree-search-meta'),
+    btnTreeSearchClear: document.getElementById('btn-tree-search-clear'),
     fileTree: document.getElementById('file-tree'),
     treeContextMenu: document.getElementById('tree-context-menu'),
+    treeContextCopy: document.getElementById('tree-context-copy'),
     treeContextRename: document.getElementById('tree-context-rename'),
     treeContextDelete: document.getElementById('tree-context-delete'),
     treeContextReadonly: document.getElementById('tree-context-readonly'),
@@ -148,6 +152,10 @@ let diskFlushQueued = false;
 let directoryFlushInFlight = false;
 let directoryFlushQueued = false;
 let treeContextTarget = null;
+const pendingCopyFileIds = new Set();
+let fileTreeSearchQuery = '';
+let currentFileTreeSearchState = null;
+let editorSearchHighlightQuery = '';
 
 const BOUND_FILE_PATH_DEFAULT_LABEL = '';
 const BOUND_FILE_PATH_DEFAULT_TOOLTIP = 'No file bound';
@@ -420,14 +428,59 @@ function persist() {
 
 function loadActiveFile() {
     clearStepHighlight();
-    const activeFile = Workspace.getActiveFile(workspace);
-    EL.editing.value = activeFile ? activeFile.content : '';
-    validateAndRender();
+    const activeFile = resolveActiveFileOrFallback();
+    if (!activeFile) {
+        editorSearchHighlightQuery = '';
+        renderNoFileSelectedState();
+    } else {
+        const searchMatch = applyEditorSearchHighlightForFile(activeFile.id);
+        EL.editing.value = activeFile.content;
+        validateAndRender();
+        if (searchMatch && Number.isFinite(searchMatch.firstMatchIndex) && searchMatch.firstMatchIndex >= 0) {
+            scrollToLine(searchMatch.firstMatchIndex);
+            syncScroll();
+        }
+    }
     renderTree();
     updateSaveIndicator('saved');
     activeFileDirty = false;
     editorCursorHistoryManager.reset();
     editorFindReplaceManager.syncFromEditorInput();
+}
+
+function resolveActiveFileOrFallback() {
+    const active = Workspace.getActiveFile(workspace);
+    if (active) return active;
+    if (!workspace?.files?.length) return null;
+
+    const fallback = workspace.files[0];
+    workspace.uiState.activeFileId = fallback.id;
+    workspace.uiState.selectedFileId = fallback.id;
+    workspace.uiState.selectedFolderId = fallback.folderId;
+    workspace.uiState.lastSelectionType = 'file';
+    lastTreeSelectionType = 'file';
+    return fallback;
+}
+
+function renderNoFileSelectedState() {
+    currentData = null;
+    EL.editing.value = '';
+    updateLineNumbers();
+    updateHighlighting();
+    updateErrorPosition(-1);
+    updateErrorMessage('');
+    setJsonValidationIdleState('No file');
+
+    if (EL.checklistBody) {
+        EL.checklistBody.innerHTML = '<tr class="empty-state"><td colspan="5">Select a file or create a new file.</td></tr>';
+    }
+
+    if (EL.scenarioTitle) {
+        const title = 'No file selected';
+        EL.scenarioTitle.textContent = title;
+        EL.scenarioTitle.title = title;
+        EL.scenarioTitle.classList.remove('is-primary');
+    }
 }
 
 // --- Logic ---
@@ -646,6 +699,10 @@ function renderEditorFindWidget(state) {
 }
 
 function runFormatAndSave() {
+    if (!Workspace.getActiveFile(workspace)) {
+        setJsonValidationIdleState('No file');
+        return;
+    }
     try {
         const selectionSnapshot = captureEditorSelectionSnapshot(EL.editing);
         EL.editing.value = JSON.stringify(JSON.parse(EL.editing.value), null, 2);
@@ -669,7 +726,7 @@ function updateActiveFileFromEditor() {
 }
 
 function updateHighlighting(errorPos = -1) {
-    EL.highlightContent.innerHTML = Editor.syntaxHighlight(EL.editing.value, errorPos);
+    EL.highlightContent.innerHTML = Editor.syntaxHighlight(EL.editing.value, errorPos, editorSearchHighlightQuery);
     syncScroll();
 }
 
@@ -701,7 +758,152 @@ function applyErrorPosition(position) {
     updateErrorPosition(normalized);
 }
 
+function normalizeFileTreeSearchQuery(value) {
+    return String(value || '').trim();
+}
+
+function buildSearchSnippet(source, startIndex, queryLength) {
+    if (!source) return '';
+    const raw = String(source);
+    const context = 26;
+    const start = Math.max(0, startIndex - context);
+    const end = Math.min(raw.length, startIndex + queryLength + context);
+    const sliced = raw.slice(start, end).replace(/\s+/g, ' ').trim();
+    if (!sliced) return '';
+    const prefix = start > 0 ? '...' : '';
+    const suffix = end < raw.length ? '...' : '';
+    return `${prefix}${sliced}${suffix}`;
+}
+
+function buildFileTreeSearchState(query) {
+    const normalizedQuery = normalizeFileTreeSearchQuery(query);
+    const state = {
+        query: normalizedQuery,
+        matchesByFileId: new Map(),
+        matchedFileCount: 0,
+        totalMatchCount: 0
+    };
+
+    if (!normalizedQuery) return state;
+    const queryLower = normalizedQuery.toLowerCase();
+
+    workspace.files.forEach((file) => {
+        const fileName = String(file.name || '');
+        const content = String(file.content || '');
+        const nameMatched = fileName.toLowerCase().includes(queryLower);
+
+        const contentLower = content.toLowerCase();
+        let contentMatchCount = 0;
+        let firstMatchIndex = -1;
+        let cursor = 0;
+        while (cursor <= contentLower.length) {
+            const foundIndex = contentLower.indexOf(queryLower, cursor);
+            if (foundIndex < 0) break;
+            if (firstMatchIndex < 0) firstMatchIndex = foundIndex;
+            contentMatchCount += 1;
+            cursor = foundIndex + Math.max(1, queryLower.length);
+        }
+
+        if (!nameMatched && contentMatchCount === 0) return;
+
+        const snippet = firstMatchIndex >= 0
+            ? buildSearchSnippet(content, firstMatchIndex, queryLower.length)
+            : '';
+
+        state.matchesByFileId.set(file.id, {
+            nameMatched,
+            contentMatchCount,
+            snippet,
+            firstMatchIndex
+        });
+        state.matchedFileCount += 1;
+        state.totalMatchCount += (nameMatched ? 1 : 0) + contentMatchCount;
+    });
+
+    return state;
+}
+
+function getCurrentFileTreeSearchState() {
+    const normalizedQuery = normalizeFileTreeSearchQuery(fileTreeSearchQuery);
+    if (!normalizedQuery) {
+        currentFileTreeSearchState = {
+            query: '',
+            matchesByFileId: new Map(),
+            matchedFileCount: 0,
+            totalMatchCount: 0
+        };
+        return currentFileTreeSearchState;
+    }
+    currentFileTreeSearchState = buildFileTreeSearchState(normalizedQuery);
+    return currentFileTreeSearchState;
+}
+
+function applyEditorSearchHighlightForFile(fileId) {
+    if (!fileId) {
+        editorSearchHighlightQuery = '';
+        return null;
+    }
+
+    const searchState = getCurrentFileTreeSearchState();
+    const match = searchState.matchesByFileId.get(fileId) || null;
+    editorSearchHighlightQuery = match ? searchState.query : '';
+    return match;
+}
+
+function updateTreeSearchMeta(searchState) {
+    if (!EL.treeSearchMeta || !EL.btnTreeSearchClear) return;
+    const query = searchState?.query || '';
+    const hasQuery = query.length > 0;
+
+    EL.btnTreeSearchClear.hidden = !hasQuery;
+
+    if (!hasQuery) {
+        EL.treeSearchMeta.textContent = '';
+        return;
+    }
+
+    if (searchState.matchedFileCount === 0) {
+        EL.treeSearchMeta.textContent = `No matches for "${query}"`;
+        return;
+    }
+
+    EL.treeSearchMeta.textContent = `${searchState.matchedFileCount} files / ${searchState.totalMatchCount} matches`;
+}
+
+function refreshEditorSearchHighlightForActiveFile() {
+    const activeFile = Workspace.getActiveFile(workspace);
+    const activeFileId = activeFile?.id || null;
+    applyEditorSearchHighlightForFile(activeFileId);
+    if (activeFileId) {
+        validateAndRender();
+    }
+}
+
+function handleTreeSearchInput(event) {
+    fileTreeSearchQuery = normalizeFileTreeSearchQuery(event?.target?.value);
+    renderTree();
+    refreshEditorSearchHighlightForActiveFile();
+}
+
+function clearTreeSearch() {
+    if (!fileTreeSearchQuery) return;
+    fileTreeSearchQuery = '';
+    if (EL.treeSearchInput) {
+        EL.treeSearchInput.value = '';
+        EL.treeSearchInput.focus();
+    }
+    renderTree();
+    refreshEditorSearchHighlightForActiveFile();
+}
+
+function handleTreeSearchKeydown(event) {
+    if (event.key !== 'Escape') return;
+    event.preventDefault();
+    clearTreeSearch();
+}
+
 function renderTree() {
+    const fileSearchState = getCurrentFileTreeSearchState();
     const treeOptions = buildTreeRenderOptions({
         getWorkspace: () => workspace,
         getActiveFileDirty: () => activeFileDirty,
@@ -718,7 +920,10 @@ function renderTree() {
         },
         onMoveFile: (fileId, targetFolderId) => moveFileById(fileId, targetFolderId)
     });
+    treeOptions.pendingCopyFileIds = pendingCopyFileIds;
+    treeOptions.fileSearchState = fileSearchState;
     UI.renderFileTree(EL.fileTree, workspace, treeOptions);
+    updateTreeSearchMeta(fileSearchState);
     updateFolderToggleButtonState();
 }
 
@@ -759,6 +964,12 @@ function openTreeContextMenu(target) {
         EL.treeContextRename.disabled = !canMutate;
         EL.treeContextRename.textContent = target.type === 'folder' ? '폴더 이름 변경' : '파일 이름 변경';
     }
+    if (EL.treeContextCopy) {
+        const isFileTarget = target.type === 'file';
+        EL.treeContextCopy.hidden = !isFileTarget;
+        EL.treeContextCopy.disabled = !canMutate;
+        EL.treeContextCopy.textContent = '파일 복사';
+    }
     if (EL.treeContextDelete) {
         EL.treeContextDelete.disabled = !canMutate;
         EL.treeContextDelete.textContent = target.type === 'folder' ? '폴더 삭제' : '파일 삭제';
@@ -768,7 +979,9 @@ function openTreeContextMenu(target) {
     }
 
     const menuWidth = 180;
-    const menuHeight = canMutate ? 90 : 120;
+    const menuHeight = canMutate
+        ? (target.type === 'file' ? 126 : 90)
+        : (target.type === 'file' ? 156 : 120);
     const maxLeft = Math.max(8, window.innerWidth - menuWidth - 8);
     const maxTop = Math.max(8, window.innerHeight - menuHeight - 8);
     const left = Math.min(Math.max(8, target.x), maxLeft);
@@ -798,6 +1011,47 @@ function getDescendantFolderIds(rootFolderId) {
     return descendants;
 }
 
+function compareFileNameForSelection(a, b) {
+    return a.name.localeCompare(b.name, 'en', { sensitivity: 'base', numeric: true });
+}
+
+function pickFallbackFileAfterDelete(deletedFile, remainingFiles) {
+    if (!deletedFile || !Array.isArray(remainingFiles) || remainingFiles.length === 0) {
+        return null;
+    }
+
+    const inSameFolder = remainingFiles
+        .filter((file) => file.folderId === deletedFile.folderId)
+        .sort(compareFileNameForSelection);
+
+    const nextInFolder = inSameFolder.find((file) => compareFileNameForSelection(file, deletedFile) > 0);
+    if (nextInFolder) return nextInFolder;
+
+    for (let index = inSameFolder.length - 1; index >= 0; index -= 1) {
+        const candidate = inSameFolder[index];
+        if (compareFileNameForSelection(candidate, deletedFile) < 0) {
+            return candidate;
+        }
+    }
+
+    const sortedAll = [...remainingFiles].sort((a, b) => {
+        const folderA = Workspace.getFolderById(workspace, a.folderId);
+        const folderB = Workspace.getFolderById(workspace, b.folderId);
+        const pathA = folderA?.path || folderA?.name || '';
+        const pathB = folderB?.path || folderB?.name || '';
+
+        const folderCompare = pathA.localeCompare(pathB, 'en', { sensitivity: 'base', numeric: true });
+        if (folderCompare !== 0) return folderCompare;
+
+        const nameCompare = compareFileNameForSelection(a, b);
+        if (nameCompare !== 0) return nameCompare;
+
+        return a.id.localeCompare(b.id, 'en', { sensitivity: 'base', numeric: true });
+    });
+
+    return sortedAll[0] || null;
+}
+
 function closeTreeContextMenu() {
     if (!EL.treeContextMenu) return;
     EL.treeContextMenu.hidden = true;
@@ -822,6 +1076,15 @@ async function handleTreeContextDelete() {
         await deleteFileById(treeContextTarget.id);
     }
     closeTreeContextMenu();
+}
+
+function handleTreeContextCopy() {
+    if (!treeContextTarget || !treeMutationsEnabled) return;
+    if (treeContextTarget.type !== 'file') return;
+
+    const targetFileId = treeContextTarget.id;
+    closeTreeContextMenu();
+    void duplicateFileById(targetFileId);
 }
 
 async function renameFolderById(id) {
@@ -1015,14 +1278,30 @@ async function deleteFileById(id) {
     }
 
     const deletedIndex = workspace.files.findIndex((item) => item.id === id);
-    if (deletedIndex >= 0) {
-        deletedFileHistoryManager.recordDeletedFile(workspace.files[deletedIndex], deletedIndex);
+    const deletedFile = deletedIndex >= 0 ? workspace.files[deletedIndex] : null;
+    if (deletedFile) {
+        deletedFileHistoryManager.recordDeletedFile(deletedFile, deletedIndex);
     }
     workspace.files = workspace.files.filter((item) => item.id !== id);
+    const fallbackFile = pickFallbackFileAfterDelete(deletedFile, workspace.files);
+
     directoryFileHandleById.delete(id);
     directoryFileFingerprintById.delete(id);
-    if (workspace.uiState.selectedFileId === id) workspace.uiState.selectedFileId = null;
-    if (workspace.uiState.activeFileId === id) workspace.uiState.activeFileId = null;
+
+    if (workspace.uiState.activeFileId === id) {
+        workspace.uiState.activeFileId = fallbackFile ? fallbackFile.id : null;
+    }
+
+    if (workspace.uiState.selectedFileId === id) {
+        workspace.uiState.selectedFileId = fallbackFile ? fallbackFile.id : null;
+    }
+
+    if (fallbackFile) {
+        workspace.uiState.selectedFolderId = fallbackFile.folderId;
+        workspace.uiState.lastSelectionType = 'file';
+        lastTreeSelectionType = 'file';
+    }
+
     persist();
     loadActiveFile();
 }
@@ -1089,6 +1368,97 @@ async function moveFileById(id, targetFolderId) {
     persist();
     if (workspace.uiState.activeFileId === file.id) {
         loadActiveFile();
+    }
+}
+
+function createCopiedFileName(originalName) {
+    const name = String(originalName || '').trim();
+    if (!name) return 'untitled-copy.json';
+
+    const dotIndex = name.lastIndexOf('.');
+    if (dotIndex <= 0) {
+        return `${name}-copy`;
+    }
+
+    const base = name.slice(0, dotIndex);
+    const ext = name.slice(dotIndex);
+    return `${base}-copy${ext}`;
+}
+
+async function duplicateFileById(id) {
+    const sourceFile = Workspace.getFileById(workspace, id);
+    if (!sourceFile) return;
+
+    const duplicatedBaseName = createCopiedFileName(sourceFile.name);
+    const nextName = Workspace.getNextAvailableFileName(workspace, sourceFile.folderId, duplicatedBaseName);
+    const duplicatedFile = Workspace.createFileRecord(sourceFile.folderId, nextName, sourceFile.content || '');
+    const directoryMode = isDirectoryWritableMode();
+
+    workspace.files.push(duplicatedFile);
+    workspace.uiState.activeFileId = duplicatedFile.id;
+    workspace.uiState.selectedFolderId = sourceFile.folderId;
+    workspace.uiState.selectedFileId = duplicatedFile.id;
+    workspace.uiState.lastSelectionType = 'file';
+    lastTreeSelectionType = 'file';
+
+    if (!directoryMode) {
+        persist();
+        loadActiveFile();
+        return;
+    }
+
+    pendingCopyFileIds.add(duplicatedFile.id);
+    renderTree();
+    loadActiveFile();
+
+    const folderHandle = directoryHandleByFolderId.get(sourceFile.folderId);
+    if (!folderHandle) {
+        pendingCopyFileIds.delete(duplicatedFile.id);
+        workspace.files = workspace.files.filter((file) => file.id !== duplicatedFile.id);
+        if (workspace.uiState.activeFileId === duplicatedFile.id) {
+            workspace.uiState.activeFileId = sourceFile.id;
+        }
+        if (workspace.uiState.selectedFileId === duplicatedFile.id) {
+            workspace.uiState.selectedFileId = sourceFile.id;
+        }
+        workspace.uiState.selectedFolderId = sourceFile.folderId;
+        workspace.uiState.lastSelectionType = 'file';
+        lastTreeSelectionType = 'file';
+        persist();
+        loadActiveFile();
+        alert('디스크 파일 복사에 필요한 폴더 핸들을 찾지 못했습니다.');
+        return;
+    }
+
+    try {
+        const fileHandle = await folderHandle.getFileHandle(nextName, { create: true });
+        const writable = await fileHandle.createWritable();
+        await writable.write(duplicatedFile.content || '');
+        await writable.close();
+        const diskFile = await fileHandle.getFile();
+        directoryFileHandleById.set(duplicatedFile.id, fileHandle);
+        directoryFileFingerprintById.set(duplicatedFile.id, buildFileFingerprint(diskFile));
+        pendingCopyFileIds.delete(duplicatedFile.id);
+        persist();
+        loadActiveFile();
+    } catch (error) {
+        pendingCopyFileIds.delete(duplicatedFile.id);
+        workspace.files = workspace.files.filter((file) => file.id !== duplicatedFile.id);
+        directoryFileHandleById.delete(duplicatedFile.id);
+        directoryFileFingerprintById.delete(duplicatedFile.id);
+        if (workspace.uiState.activeFileId === duplicatedFile.id) {
+            workspace.uiState.activeFileId = sourceFile.id;
+        }
+        if (workspace.uiState.selectedFileId === duplicatedFile.id) {
+            workspace.uiState.selectedFileId = sourceFile.id;
+        }
+        workspace.uiState.selectedFolderId = sourceFile.folderId;
+        workspace.uiState.lastSelectionType = 'file';
+        lastTreeSelectionType = 'file';
+        persist();
+        loadActiveFile();
+        console.error('[qa-scenario] failed to duplicate file on disk', error);
+        alert('디스크 파일 복사에 실패했습니다.');
     }
 }
 
@@ -1244,6 +1614,11 @@ function renderChecklist() {
             syncToEditor();
         },
         onUpdateStep: (idx, field, val) => {
+            if (field === 'divider') {
+                currentData.steps[idx].divider = UI.normalizeEditableChecklistDividerValue(val);
+                syncToEditor();
+                return;
+            }
             if (isStepArrayField(field)) {
                 currentData.steps[idx][field] = toChecklistArray(val);
             } else {
@@ -1472,7 +1847,7 @@ async function handleBindOpenClick(event) {
     const forceFileOpen = Boolean(event?.shiftKey);
     if (!forceFileOpen && typeof window.showDirectoryPicker === 'function') {
         try {
-            const directoryHandle = await window.showDirectoryPicker({ mode: 'read' });
+            const directoryHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
             if (!directoryHandle) return;
             await bindAndLoadFromDirectoryHandle(directoryHandle);
             return;
@@ -1515,10 +1890,34 @@ async function handleBindOpenFileClick() {
 
 async function bindAndLoadFromDirectoryHandle(handle, options = {}) {
     const isRestore = options?.isRestore === true;
-    const readGranted = await ensureDirectoryReadPermission(handle, {
-        interactive: !isRestore,
-        silent: isRestore
-    });
+    let writeGranted = false;
+    let readGranted = false;
+
+    if (isRestore) {
+        readGranted = await ensureDirectoryReadPermission(handle, {
+            interactive: false,
+            silent: true
+        });
+        writeGranted = await ensureDirectoryReadWritePermission(handle, {
+            interactive: false,
+            silent: true
+        });
+    } else {
+        writeGranted = await ensureDirectoryReadWritePermission(handle, {
+            interactive: true,
+            silent: false
+        });
+
+        if (writeGranted) {
+            readGranted = true;
+        } else {
+            readGranted = await ensureDirectoryReadPermission(handle, {
+                interactive: false,
+                silent: false
+            });
+        }
+    }
+
     if (!readGranted) {
         if (isRestore) {
             updateBoundFilePathInput('Not connected: re-open folder to load disk tree', 'warning');
@@ -1541,11 +1940,6 @@ async function bindAndLoadFromDirectoryHandle(handle, options = {}) {
         alert('Unsupported or invalid directory contents');
         return false;
     }
-
-    const writeGranted = await ensureDirectoryReadWritePermission(handle, {
-        interactive: !isRestore,
-        silent: isRestore
-    });
 
     clearBoundFile({ clearPersistedDirectoryHandle: false });
     boundDirectoryHandle = handle;
@@ -2032,6 +2426,7 @@ function renderEditorFromCurrentData() {
 }
 
 function setJsonValidationValidState() {
+    EL.jsonStatus.classList.remove('idle');
     setJsonValidationValidView(
         EL.jsonStatus,
         () => updateErrorPosition(-1),
@@ -2040,7 +2435,15 @@ function setJsonValidationValidState() {
 }
 
 function setJsonValidationErrorState(label) {
+    EL.jsonStatus.classList.remove('idle');
     setJsonValidationErrorView(EL.jsonStatus, label);
+}
+
+function setJsonValidationIdleState(label = 'No file') {
+    if (!EL.jsonStatus) return;
+    EL.jsonStatus.textContent = label;
+    EL.jsonStatus.classList.remove('error');
+    EL.jsonStatus.classList.add('idle');
 }
 
 function updateErrorMessage(message) {
@@ -2106,6 +2509,9 @@ function setupWindowListeners() {
     });
     if (EL.treeContextRename) {
         EL.treeContextRename.addEventListener('click', handleTreeContextRename);
+    }
+    if (EL.treeContextCopy) {
+        EL.treeContextCopy.addEventListener('click', handleTreeContextCopy);
     }
     if (EL.treeContextDelete) {
         EL.treeContextDelete.addEventListener('click', handleTreeContextDelete);
@@ -2196,6 +2602,14 @@ function setupEventListeners() {
             alert('Open failed');
         }
     });
+
+    if (EL.treeSearchInput) {
+        EL.treeSearchInput.addEventListener('input', handleTreeSearchInput);
+        EL.treeSearchInput.addEventListener('keydown', handleTreeSearchKeydown);
+    }
+    if (EL.btnTreeSearchClear) {
+        EL.btnTreeSearchClear.addEventListener('click', clearTreeSearch);
+    }
 }
 
 function handleDocumentKeydown(event) {

@@ -357,6 +357,7 @@ body {
 }
 
 .file-tree-panel.is-collapsed .tree-toolbar-left,
+.file-tree-panel.is-collapsed .tree-search,
 .file-tree-panel.is-collapsed .tree-view {
     display: none;
 }
@@ -385,6 +386,67 @@ body {
     gap: 6px;
     padding: 8px;
     border-bottom: 1px solid var(--border-muted);
+}
+
+.tree-search {
+    padding: 8px;
+    border-bottom: 1px solid var(--border-muted);
+    border-top: 1px solid var(--border-muted);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.tree-search-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.tree-search-input {
+    width: 100%;
+    min-height: 28px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    background: var(--editor-bg);
+    color: var(--text-primary);
+    padding: 4px 8px;
+    font-size: 12px;
+}
+
+.tree-search-input:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 2px rgba(56, 139, 253, 0.2);
+}
+
+.tree-search-clear {
+    appearance: none;
+    border: 1px solid var(--border-color);
+    background-color: rgba(33, 38, 45, 0.95);
+    color: var(--text-secondary);
+    border-radius: 6px;
+    font-size: 11px;
+    line-height: 18px;
+    font-weight: 500;
+    padding: 2px 8px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.tree-search-clear:hover {
+    color: var(--text-primary);
+    border-color: #8b949e;
+    background-color: #30363d;
+}
+
+.tree-search-meta {
+    min-height: 14px;
+    font-size: 11px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .tree-toolbar-left {
@@ -580,6 +642,83 @@ body {
     padding-left: 28px;
 }
 
+.tree-file-row.has-search-snippet {
+    align-items: flex-start;
+}
+
+.tree-file-text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.tree-search-snippet {
+    font-size: 10px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 14px;
+    margin-top: 1px;
+}
+
+.tree-search-badges {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+    flex: 0 0 auto;
+}
+
+.tree-search-badge {
+    font-size: 10px;
+    line-height: 14px;
+    padding: 0 5px;
+    border-radius: 999px;
+    border: 1px solid rgba(88, 166, 255, 0.45);
+    color: #79c0ff;
+    background: rgba(56, 139, 253, 0.16);
+    white-space: nowrap;
+}
+
+.tree-search-hit {
+    background: rgba(255, 208, 79, 0.25);
+    color: #ffd24a;
+    border-radius: 3px;
+    padding: 0 1px;
+}
+
+.tree-file-row.is-pending-copy {
+    position: relative;
+    overflow: hidden;
+}
+
+.tree-file-row.is-pending-copy::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        110deg,
+        rgba(121, 192, 255, 0) 0%,
+        rgba(121, 192, 255, 0) 35%,
+        rgba(121, 192, 255, 0.28) 50%,
+        rgba(121, 192, 255, 0) 65%,
+        rgba(121, 192, 255, 0) 100%
+    );
+    transform: translateX(-120%);
+    animation: tree-copy-glitter 1.1s linear infinite;
+    pointer-events: none;
+}
+
+.tree-copy-pending-badge {
+    flex: 0 0 auto;
+    font-size: 10px;
+    color: #79c0ff;
+    opacity: 0.95;
+    pointer-events: none;
+}
+
 .tree-file-row.is-selected {
     background-color: rgba(47, 129, 247, 0.24);
     color: #f0f6fc;
@@ -587,6 +726,12 @@ body {
 
 .tree-file-row.is-dragging {
     opacity: 0.45;
+}
+
+@keyframes tree-copy-glitter {
+    to {
+        transform: translateX(120%);
+    }
 }
 
 .tree-open-indicator {
@@ -968,6 +1113,14 @@ mark.json-error {
     margin: 0;
 }
 
+mark.json-search-hit {
+    background-color: rgba(255, 208, 79, 0.28);
+    color: inherit;
+    border-radius: 2px;
+    padding: 0;
+    margin: 0;
+}
+
 /* Checklist Table */
 .checklist-container {
     flex: 1;
@@ -1042,6 +1195,25 @@ tr.checklist-divider-row td {
     text-transform: none;
 }
 
+.checklist-divider-content {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin: 0;
+    font-weight: 600;
+    color: inherit;
+}
+
+.checklist-divider-inner {
+    display: flex;
+    align-items: center;
+    width: 100%;
+}
+
+.checklist-divider-spacer {
+    flex: 0 0 12px;
+    width: 12px;
+}
+
 .col-num { width: 40px; text-align: center; color: var(--text-secondary); }
 .col-given { width: 25%; min-width: 150px; }
 .col-when { width: 25%; min-width: 150px; }
@@ -1075,6 +1247,7 @@ tr.checklist-divider-row td {
     border-radius: 4px;
     transition: background-color 120ms ease, box-shadow 120ms ease;
     word-break: normal;
+    overflow-wrap: anywhere;
     white-space: pre-wrap;
     outline: none;
     cursor: text;
@@ -1135,6 +1308,12 @@ tr.checklist-divider-row td {
     background: rgba(218, 54, 51, 0.18);
     border-color: rgba(218, 54, 51, 0.45);
     color: #f85149;
+}
+
+.status-badge.idle {
+    background: rgba(139, 148, 158, 0.2);
+    border-color: rgba(139, 148, 158, 0.45);
+    color: #8b949e;
 }
 
 /* Custom Checkbox */
