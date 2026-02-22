@@ -2,7 +2,8 @@ import { buildRequiredScenarioWithDefaults } from '../modules/export-data-manage
 import {
     getChecklistDividerTitle,
     isChecklistDividerStep,
-    normalizeChecklistDividerValue
+    normalizeChecklistDividerValue,
+    normalizeEditableChecklistDividerValue
 } from '../modules/ui-renderer.js';
 import { assertEqual, test } from './lib/test-runner.mjs';
 
@@ -42,4 +43,10 @@ test('required scenario normalization preserves valid divider rows', () => {
     assertEqual(normalized.steps[1].divider, 'Group A');
     assertEqual(Array.isArray(normalized.steps[2].given), true);
     assertEqual(normalized.steps[2].pass, false);
+});
+
+test('editable divider normalization keeps divider step for empty input', () => {
+    assertEqual(normalizeEditableChecklistDividerValue('  Group B  '), 'Group B');
+    assertEqual(normalizeEditableChecklistDividerValue('   '), true);
+    assertEqual(normalizeEditableChecklistDividerValue(null), true);
 });

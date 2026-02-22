@@ -49,6 +49,11 @@ export function normalizeChecklistDividerValue(value) {
     return trimmed.length > 0 ? trimmed : null;
 }
 
+export function normalizeEditableChecklistDividerValue(value) {
+    const normalized = normalizeChecklistDividerValue(value);
+    return normalized === null ? true : normalized;
+}
+
 export function isChecklistDividerStep(step) {
     return normalizeChecklistDividerValue(step?.divider) !== null;
 }
@@ -375,7 +380,40 @@ export function renderChecklist(container, data, options = {}) {
             dividerRow.className = 'checklist-divider-row';
             const dividerCell = document.createElement('td');
             dividerCell.colSpan = 5;
-            dividerCell.textContent = getChecklistDividerTitle(step);
+            const dividerContent = document.createElement('div');
+            dividerContent.className = 'cell-content checklist-divider-content';
+            dividerContent.contentEditable = 'true';
+            dividerContent.dataset.field = 'divider';
+
+            const rawDividerText = getChecklistDividerTitle(step);
+            dividerContent.dataset.rawValue = rawDividerText;
+            dividerContent.textContent = rawDividerText;
+
+            dividerContent.addEventListener('focus', (event) => {
+                event.target.textContent = event.target.dataset.rawValue;
+            });
+            dividerContent.addEventListener('input', (event) => {
+                onUpdateStep(index, 'divider', event.target.innerText);
+            });
+            dividerContent.addEventListener('blur', (event) => {
+                const nextDividerValue = normalizeEditableChecklistDividerValue(event.target.innerText);
+                onUpdateStep(index, 'divider', nextDividerValue);
+
+                const nextLabel = getChecklistDividerTitle({ divider: nextDividerValue });
+                event.target.dataset.rawValue = nextLabel;
+                event.target.textContent = nextLabel;
+            });
+
+            const dividerInner = document.createElement('div');
+            dividerInner.className = 'checklist-divider-inner';
+
+            const dividerSpacer = document.createElement('span');
+            dividerSpacer.className = 'checklist-divider-spacer';
+            dividerSpacer.setAttribute('aria-hidden', 'true');
+
+            dividerInner.appendChild(dividerSpacer);
+            dividerInner.appendChild(dividerContent);
+            dividerCell.appendChild(dividerInner);
             dividerRow.appendChild(dividerCell);
             dividerRow.addEventListener('click', () => {
                 const rows = container.querySelectorAll('tr');

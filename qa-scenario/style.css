@@ -1078,6 +1078,25 @@ tr.checklist-divider-row td {
     text-transform: none;
 }
 
+.checklist-divider-content {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin: 0;
+    font-weight: 600;
+    color: inherit;
+}
+
+.checklist-divider-inner {
+    display: flex;
+    align-items: center;
+    width: 100%;
+}
+
+.checklist-divider-spacer {
+    flex: 0 0 12px;
+    width: 12px;
+}
+
 .col-num { width: 40px; text-align: center; color: var(--text-secondary); }
 .col-given { width: 25%; min-width: 150px; }
 .col-when { width: 25%; min-width: 150px; }

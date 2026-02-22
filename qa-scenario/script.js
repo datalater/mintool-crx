@@ -1455,6 +1455,11 @@ function renderChecklist() {
             syncToEditor();
         },
         onUpdateStep: (idx, field, val) => {
+            if (field === 'divider') {
+                currentData.steps[idx].divider = UI.normalizeEditableChecklistDividerValue(val);
+                syncToEditor();
+                return;
+            }
             if (isStepArrayField(field)) {
                 currentData.steps[idx][field] = toChecklistArray(val);
             } else {
