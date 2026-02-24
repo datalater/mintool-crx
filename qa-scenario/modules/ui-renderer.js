@@ -483,7 +483,7 @@ function appendAddRowButton(container, anchorRow, afterIndex, onAddStep) {
 }
 
 export function renderChecklist(container, data, options = {}) {
-    const { onUpdatePass, onUpdateStep, onHighlightStep, onScenarioTitleUpdate, onAddStep } = options;
+    const { onUpdatePass, onUpdateStep, onHighlightStep, onScenarioTitleUpdate, onAddStep, onOpenChecklistContextMenu } = options;
     if (!container) return;
 
     const blurOnEscape = (editable) => {
@@ -571,6 +571,13 @@ export function renderChecklist(container, data, options = {}) {
                 dividerRow.classList.add('selected-row');
                 onHighlightStep(index);
             });
+            if (typeof onOpenChecklistContextMenu === 'function') {
+                dividerRow.addEventListener('contextmenu', (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onOpenChecklistContextMenu({ index, x: event.clientX, y: event.clientY });
+                });
+            }
             container.appendChild(dividerRow);
             if (typeof onAddStep === 'function') {
                 appendAddRowButton(container, dividerRow, index, onAddStep);
@@ -624,6 +631,13 @@ export function renderChecklist(container, data, options = {}) {
             tr.classList.add('selected-row');
             onHighlightStep(index);
         });
+        if (typeof onOpenChecklistContextMenu === 'function') {
+            tr.addEventListener('contextmenu', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onOpenChecklistContextMenu({ index, x: event.clientX, y: event.clientY });
+            });
+        }
 
         tr.querySelector('.col-pass input').addEventListener('change', (e) => onUpdatePass(index, e.target.checked));
         container.appendChild(tr);

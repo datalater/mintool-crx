@@ -94,6 +94,8 @@ const EL = {
     treeContextRename: document.getElementById('tree-context-rename'),
     treeContextDelete: document.getElementById('tree-context-delete'),
     treeContextReadonly: document.getElementById('tree-context-readonly'),
+    checklistContextMenu: document.getElementById('checklist-context-menu'),
+    checklistContextDelete: document.getElementById('checklist-context-delete'),
     fileTreePanel: document.querySelector('.file-tree-panel'),
     fileTreeResizer: document.getElementById('file-tree-resizer'),
     appContent: document.querySelector('.app-content'),
@@ -152,6 +154,7 @@ let diskFlushQueued = false;
 let directoryFlushInFlight = false;
 let directoryFlushQueued = false;
 let treeContextTarget = null;
+let checklistContextTarget = null;
 const pendingCopyFileIds = new Set();
 let fileTreeSearchQuery = '';
 let currentFileTreeSearchState = null;
@@ -1058,6 +1061,39 @@ function closeTreeContextMenu() {
     treeContextTarget = null;
 }
 
+function openChecklistContextMenu(target) {
+    if (!EL.checklistContextMenu || target == null) return;
+    checklistContextTarget = target;
+
+    const menuWidth = 160;
+    const menuHeight = 40;
+    const maxLeft = Math.max(8, window.innerWidth - menuWidth - 8);
+    const maxTop = Math.max(8, window.innerHeight - menuHeight - 8);
+    const left = Math.min(Math.max(8, target.x), maxLeft);
+    const top = Math.min(Math.max(8, target.y), maxTop);
+
+    EL.checklistContextMenu.style.left = `${left}px`;
+    EL.checklistContextMenu.style.top = `${top}px`;
+    EL.checklistContextMenu.hidden = false;
+}
+
+function closeChecklistContextMenu() {
+    if (!EL.checklistContextMenu) return;
+    EL.checklistContextMenu.hidden = true;
+    checklistContextTarget = null;
+}
+
+function handleChecklistContextDelete() {
+    if (checklistContextTarget == null) return;
+    const idx = checklistContextTarget.index;
+    if (!currentData || !Array.isArray(currentData.steps)) return;
+    if (idx < 0 || idx >= currentData.steps.length) return;
+    currentData.steps.splice(idx, 1);
+    syncToEditor();
+    renderChecklist();
+    closeChecklistContextMenu();
+}
+
 async function handleTreeContextRename() {
     if (!treeContextTarget || !treeMutationsEnabled) return;
     if (treeContextTarget.type === 'folder') {
@@ -1643,7 +1679,8 @@ function renderChecklist() {
             currentData.steps.splice(afterIndex + 1, 0, newStep);
             syncToEditor();
             renderChecklist();
-        }
+        },
+        onOpenChecklistContextMenu: openChecklistContextMenu
     });
     UI.updatePassHeaderState(EL.passHeaderToggle, currentData);
     clearHighlightIfNoSelection();
@@ -2506,13 +2543,19 @@ function setupWindowListeners() {
     window.addEventListener('beforeunload', handleBeforeUnload);
     window.addEventListener('resize', handleWindowResize);
     document.addEventListener('click', (event) => {
-        if (!EL.treeContextMenu || EL.treeContextMenu.hidden) return;
-        if (EL.treeContextMenu.contains(event.target)) return;
-        closeTreeContextMenu();
+        if (!EL.treeContextMenu || EL.treeContextMenu.hidden) {
+            // skip tree menu
+        } else if (!EL.treeContextMenu.contains(event.target)) {
+            closeTreeContextMenu();
+        }
+        if (!EL.checklistContextMenu || EL.checklistContextMenu.hidden) return;
+        if (EL.checklistContextMenu.contains(event.target)) return;
+        closeChecklistContextMenu();
     });
     document.addEventListener('keydown', (event) => {
         if (event.key !== 'Escape') return;
         closeTreeContextMenu();
+        closeChecklistContextMenu();
     });
     if (EL.treeContextRename) {
         EL.treeContextRename.addEventListener('click', handleTreeContextRename);
@@ -2522,6 +2565,9 @@ function setupWindowListeners() {
     }
     if (EL.treeContextDelete) {
         EL.treeContextDelete.addEventListener('click', handleTreeContextDelete);
+    }
+    if (EL.checklistContextDelete) {
+        EL.checklistContextDelete.addEventListener('click', handleChecklistContextDelete);
     }
 }
 
