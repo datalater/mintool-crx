@@ -1196,8 +1196,9 @@ tr.checklist-divider-row td {
 }
 
 .checklist-divider-content {
-    flex: 1 1 auto;
-    min-width: 0;
+    flex: 0 0 auto;
+    width: fit-content;
+    max-width: calc(100% - 12px);
     margin: 0;
     font-weight: 600;
     color: inherit;
