@@ -1636,6 +1636,13 @@ function renderChecklist() {
             EL.scenarioTitle.textContent = title;
             EL.scenarioTitle.title = title;
             EL.scenarioTitle.classList.toggle('is-primary', isPrimary);
+        },
+        onAddStep: (afterIndex) => {
+            if (!currentData || !Array.isArray(currentData.steps)) return;
+            const newStep = { given: '', when: '', then: '', pass: false };
+            currentData.steps.splice(afterIndex + 1, 0, newStep);
+            syncToEditor();
+            renderChecklist();
         }
     });
     UI.updatePassHeaderState(EL.passHeaderToggle, currentData);

@@ -1411,6 +1411,64 @@ tr.checklist-divider-row td {
     color: var(--accent-primary);
 }
 
+/* Add Row Button (Notion-style) */
+.checklist-add-row-zone {
+    height: 0;
+    position: relative;
+    z-index: 5;
+    border: none;
+}
+
+.checklist-add-row-zone td {
+    padding: 0;
+    border: none;
+    height: 0;
+    line-height: 0;
+    position: relative;
+}
+
+.checklist-add-row-zone:hover {
+    background-color: transparent;
+    cursor: default;
+}
+
+.checklist-add-row-btn {
+    position: absolute;
+    left: 20px;
+    top: -1px;
+    transform: translateX(-50%) translateY(-50%);
+    z-index: 6;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 1px solid var(--border-color);
+    background-color: var(--pane-bg);
+    color: var(--text-secondary);
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 150ms ease, background-color 120ms ease, color 120ms ease, border-color 120ms ease;
+    pointer-events: none;
+}
+
+/* Show button when hovering the data row above or the zone itself */
+tr:hover + .checklist-add-row-zone .checklist-add-row-btn,
+.checklist-add-row-zone:hover .checklist-add-row-btn {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.checklist-add-row-btn:hover {
+    background-color: var(--accent-primary);
+    border-color: var(--accent-primary);
+    color: #ffffff;
+}
+
+
 /* Scrollbar */
 ::-webkit-scrollbar {
     width: 8px;

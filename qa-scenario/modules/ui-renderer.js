@@ -458,8 +458,32 @@ export function renderFileTree(container, workspace, options = {}) {
         });
 }
 
+function createAddRowButton(afterIndex, onAddStep) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'checklist-add-row-btn';
+    btn.textContent = '+';
+    btn.title = 'Add step below';
+    btn.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onAddStep(afterIndex);
+    });
+    return btn;
+}
+
+function appendAddRowButton(container, anchorRow, afterIndex, onAddStep) {
+    const wrapperRow = document.createElement('tr');
+    wrapperRow.className = 'checklist-add-row-zone';
+    const cell = document.createElement('td');
+    cell.colSpan = 5;
+    cell.appendChild(createAddRowButton(afterIndex, onAddStep));
+    wrapperRow.appendChild(cell);
+    container.appendChild(wrapperRow);
+}
+
 export function renderChecklist(container, data, options = {}) {
-    const { onUpdatePass, onUpdateStep, onHighlightStep, onScenarioTitleUpdate } = options;
+    const { onUpdatePass, onUpdateStep, onHighlightStep, onScenarioTitleUpdate, onAddStep } = options;
     if (!container) return;
 
     const blurOnEscape = (editable) => {
@@ -484,7 +508,14 @@ export function renderChecklist(container, data, options = {}) {
     }
 
     if (data.steps.length === 0) {
-        container.innerHTML = '<tr class="empty-state"><td colspan="5">No steps in this scenario file.</td></tr>';
+        container.innerHTML = '';
+        const emptyRow = document.createElement('tr');
+        emptyRow.className = 'empty-state';
+        emptyRow.innerHTML = '<td colspan="5">No steps in this scenario file.</td>';
+        container.appendChild(emptyRow);
+        if (typeof onAddStep === 'function') {
+            appendAddRowButton(container, emptyRow, -1, onAddStep);
+        }
         return;
     }
 
@@ -541,6 +572,9 @@ export function renderChecklist(container, data, options = {}) {
                 onHighlightStep(index);
             });
             container.appendChild(dividerRow);
+            if (typeof onAddStep === 'function') {
+                appendAddRowButton(container, dividerRow, index, onAddStep);
+            }
             return;
         }
 
@@ -593,5 +627,8 @@ export function renderChecklist(container, data, options = {}) {
 
         tr.querySelector('.col-pass input').addEventListener('change', (e) => onUpdatePass(index, e.target.checked));
         container.appendChild(tr);
+        if (typeof onAddStep === 'function') {
+            appendAddRowButton(container, tr, index, onAddStep);
+        }
     });
 }
