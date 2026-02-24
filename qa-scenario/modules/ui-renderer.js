@@ -462,6 +462,17 @@ export function renderChecklist(container, data, options = {}) {
     const { onUpdatePass, onUpdateStep, onHighlightStep, onScenarioTitleUpdate } = options;
     if (!container) return;
 
+    const blurOnEscape = (editable) => {
+        editable.addEventListener('keydown', (event) => {
+            if (event.key !== 'Escape') return;
+            event.preventDefault();
+            event.stopPropagation();
+            if (typeof event.currentTarget?.blur === 'function') {
+                event.currentTarget.blur();
+            }
+        });
+    };
+
     if (!data || !data.steps || !Array.isArray(data.steps)) {
         container.innerHTML = '<tr class="empty-state"><td colspan="5">JSON structure must contain a "steps" array.</td></tr>';
         if (onScenarioTitleUpdate) onScenarioTitleUpdate("No valid steps found", false);
@@ -508,6 +519,7 @@ export function renderChecklist(container, data, options = {}) {
                 event.target.dataset.rawValue = nextLabel;
                 event.target.textContent = nextLabel;
             });
+            blurOnEscape(dividerContent);
 
             const dividerInner = document.createElement('div');
             dividerInner.className = 'checklist-divider-inner';
@@ -563,6 +575,7 @@ export function renderChecklist(container, data, options = {}) {
                 e.target.dataset.rawValue = v;
                 e.target.innerHTML = formatChecklistCellContent(v);
             });
+            blurOnEscape(cell);
         };
 
         populateCell('given', normalizeStepFieldForEditor(step.given));
