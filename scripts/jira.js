@@ -67,18 +67,13 @@ function createCopyControlsElement() {
   copyControlsElement.style.pointerEvents = "none";
   copyControlsElement.style.zIndex = "2147483647";
 
-  const copyLinkButtonElement = createCopyButtonElement(
-    "copy link",
-    () => activeJiraTicketLinkElement?.href ?? "",
-    "Link copied"
-  );
   const copyTextButtonElement = createCopyButtonElement(
     "copy text",
     () => (activeJiraTicketLinkElement?.textContent ?? "").trim(),
-    "Text copied"
+    "Text copied",
   );
 
-  copyControlsElement.append(copyLinkButtonElement, copyTextButtonElement);
+  copyControlsElement.append(copyTextButtonElement);
 
   if (document.body) {
     document.body.appendChild(copyControlsElement);
@@ -96,7 +91,7 @@ function createCopyControlsElement() {
 function createCopyButtonElement(
   buttonLabel,
   resolveCopyValue,
-  copySuccessMessage
+  copySuccessMessage,
 ) {
   const copyButtonElement = document.createElement("button");
   copyButtonElement.type = "button";
@@ -182,7 +177,7 @@ function positionCopyControlsElement(jiraTicketLinkElement) {
       4,
       jiraTicketLinkRect.top -
         copyControlsHeight -
-        COPY_CONTROLS_VERTICAL_OFFSET
+        COPY_CONTROLS_VERTICAL_OFFSET,
     );
   const copyControlsLeftPosition = window.scrollX + jiraTicketLinkRect.left;
 
