@@ -29,7 +29,7 @@
   },
   "content_scripts": [
     {
-      "js": ["lib/global.js", "lib/toastify.js"],
+      "js": ["lib/global.js", "lib/virtual-fullscreen-main.js", "lib/toastify.js"],
       "matches": ["<all_urls>"],
       "world": "MAIN",
       "run_at": "document_start"
@@ -42,6 +42,7 @@
         "lib/wait-for-element.js",
         "lib/dom-utils.js",
         "lib/toastify.js",
+        "lib/virtual-fullscreen.js",
         "lib/draggable.js","lib/dom-style-editor.js","lib/dom-eraser.js",
         "lib/vue-min.js"
       ],
