@@ -1673,10 +1673,11 @@ function renderChecklist() {
             EL.scenarioTitle.title = title;
             EL.scenarioTitle.classList.toggle('is-primary', isPrimary);
         },
-        onAddStep: (afterIndex) => {
+        onAddStep: (insertIndex) => {
             if (!currentData || !Array.isArray(currentData.steps)) return;
-            const newStep = { given: [], when: [], then: [], pass: false };
-            currentData.steps.splice(afterIndex + 1, 0, newStep);
+            const newStep = JSON.parse('{"given":[],"when":[],"then":[],"pass":false}');
+            const safeInsertIndex = Math.max(0, Math.min(Number(insertIndex) || 0, currentData.steps.length));
+            currentData.steps.splice(safeInsertIndex, 0, newStep);
             syncToEditor();
             renderChecklist();
         },

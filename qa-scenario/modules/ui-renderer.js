@@ -458,26 +458,27 @@ export function renderFileTree(container, workspace, options = {}) {
         });
 }
 
-function createAddRowButton(afterIndex, onAddStep) {
+function createAddRowButton(insertIndex, onAddStep, title) {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'checklist-add-row-btn';
     btn.textContent = '+';
-    btn.title = 'Add step below';
+    btn.title = title;
     btn.addEventListener('click', (event) => {
         event.preventDefault();
         event.stopPropagation();
-        onAddStep(afterIndex);
+        onAddStep(insertIndex);
     });
     return btn;
 }
 
-function appendAddRowButton(container, anchorRow, afterIndex, onAddStep) {
+function appendAddRowButton(container, insertIndex, onAddStep, options = {}) {
+    const { title = 'Add step below', zoneClassName = '' } = options;
     const wrapperRow = document.createElement('tr');
-    wrapperRow.className = 'checklist-add-row-zone';
+    wrapperRow.className = `checklist-add-row-zone ${zoneClassName}`.trim();
     const cell = document.createElement('td');
     cell.colSpan = 5;
-    cell.appendChild(createAddRowButton(afterIndex, onAddStep));
+    cell.appendChild(createAddRowButton(insertIndex, onAddStep, title));
     wrapperRow.appendChild(cell);
     container.appendChild(wrapperRow);
 }
@@ -514,7 +515,7 @@ export function renderChecklist(container, data, options = {}) {
         emptyRow.innerHTML = '<td colspan="5">No steps in this scenario file.</td>';
         container.appendChild(emptyRow);
         if (typeof onAddStep === 'function') {
-            appendAddRowButton(container, emptyRow, -1, onAddStep);
+            appendAddRowButton(container, 0, onAddStep);
         }
         return;
     }
@@ -578,9 +579,15 @@ export function renderChecklist(container, data, options = {}) {
                     onOpenChecklistContextMenu({ index, x: event.clientX, y: event.clientY });
                 });
             }
+            if (index === 0 && typeof onAddStep === 'function') {
+                appendAddRowButton(container, 0, onAddStep, {
+                    title: 'Add step above',
+                    zoneClassName: 'is-before-first-row'
+                });
+            }
             container.appendChild(dividerRow);
             if (typeof onAddStep === 'function') {
-                appendAddRowButton(container, dividerRow, index, onAddStep);
+                appendAddRowButton(container, index + 1, onAddStep);
             }
             return;
         }
@@ -640,9 +647,15 @@ export function renderChecklist(container, data, options = {}) {
         }
 
         tr.querySelector('.col-pass input').addEventListener('change', (e) => onUpdatePass(index, e.target.checked));
+        if (index === 0 && typeof onAddStep === 'function') {
+            appendAddRowButton(container, 0, onAddStep, {
+                title: 'Add step above',
+                zoneClassName: 'is-before-first-row'
+            });
+        }
         container.appendChild(tr);
         if (typeof onAddStep === 'function') {
-            appendAddRowButton(container, tr, index, onAddStep);
+            appendAddRowButton(container, index + 1, onAddStep);
         }
     });
 }

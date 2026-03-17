@@ -1457,6 +1457,7 @@ tr.checklist-divider-row td {
 
 /* Show button when hovering the data row above or the zone itself */
 tr:hover + .checklist-add-row-zone .checklist-add-row-btn,
+.checklist-add-row-zone.is-before-first-row:has(+ tr:hover) .checklist-add-row-btn,
 .checklist-add-row-zone:hover .checklist-add-row-btn {
     opacity: 1;
     pointer-events: auto;
