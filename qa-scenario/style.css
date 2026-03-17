@@ -1427,17 +1427,23 @@ tr.checklist-divider-row td {
     position: relative;
 }
 
+.checklist-add-row-actions {
+    position: absolute;
+    left: 10px;
+    top: -1px;
+    transform: translateY(-50%);
+    z-index: 6;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
 .checklist-add-row-zone:hover {
     background-color: transparent;
     cursor: default;
 }
 
 .checklist-add-row-btn {
-    position: absolute;
-    left: 20px;
-    top: -1px;
-    transform: translateX(-50%) translateY(-50%);
-    z-index: 6;
     display: flex;
     align-items: center;
     justify-content: center;

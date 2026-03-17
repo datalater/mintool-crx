@@ -1644,6 +1644,14 @@ function downloadExportPayload(payload) {
 }
 
 function renderChecklist() {
+    const insertChecklistEntry = (insertIndex, entry) => {
+        if (!currentData || !Array.isArray(currentData.steps)) return;
+        const safeInsertIndex = Math.max(0, Math.min(Number(insertIndex) || 0, currentData.steps.length));
+        currentData.steps.splice(safeInsertIndex, 0, entry);
+        syncToEditor();
+        renderChecklist();
+    };
+
     UI.renderChecklist(EL.checklistBody, currentData, {
         onUpdatePass: (idx, val) => {
             currentData.steps[idx].pass = val;
@@ -1674,12 +1682,10 @@ function renderChecklist() {
             EL.scenarioTitle.classList.toggle('is-primary', isPrimary);
         },
         onAddStep: (insertIndex) => {
-            if (!currentData || !Array.isArray(currentData.steps)) return;
-            const newStep = JSON.parse('{"given":[],"when":[],"then":[],"pass":false}');
-            const safeInsertIndex = Math.max(0, Math.min(Number(insertIndex) || 0, currentData.steps.length));
-            currentData.steps.splice(safeInsertIndex, 0, newStep);
-            syncToEditor();
-            renderChecklist();
+            insertChecklistEntry(insertIndex, JSON.parse('{"given":[],"when":[],"then":[],"pass":false}'));
+        },
+        onAddDivider: (insertIndex) => {
+            insertChecklistEntry(insertIndex, { divider: true });
         },
         onOpenChecklistContextMenu: openChecklistContextMenu
     });

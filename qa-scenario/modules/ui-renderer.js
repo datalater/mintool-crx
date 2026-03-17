@@ -458,34 +458,49 @@ export function renderFileTree(container, workspace, options = {}) {
         });
 }
 
-function createAddRowButton(insertIndex, onAddStep, title) {
+function createAddRowButton(label, insertIndex, onClick, title, className = '') {
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'checklist-add-row-btn';
-    btn.textContent = '+';
+    btn.className = `checklist-add-row-btn ${className}`.trim();
+    btn.textContent = label;
     btn.title = title;
     btn.addEventListener('click', (event) => {
         event.preventDefault();
         event.stopPropagation();
-        onAddStep(insertIndex);
+        onClick(insertIndex);
     });
     return btn;
 }
 
-function appendAddRowButton(container, insertIndex, onAddStep, options = {}) {
-    const { title = 'Add step below', zoneClassName = '' } = options;
+function appendAddRowButton(container, insertIndex, options = {}) {
+    const {
+        stepTitle = 'Add step below',
+        dividerTitle = 'Add divider below',
+        zoneClassName = '',
+        onAddStep,
+        onAddDivider
+    } = options;
     const wrapperRow = document.createElement('tr');
     wrapperRow.className = `checklist-add-row-zone ${zoneClassName}`.trim();
     const cell = document.createElement('td');
     cell.colSpan = 5;
-    cell.appendChild(createAddRowButton(insertIndex, onAddStep, title));
+    const actions = document.createElement('div');
+    actions.className = 'checklist-add-row-actions';
+    if (typeof onAddStep === 'function') {
+        actions.appendChild(createAddRowButton('+', insertIndex, onAddStep, stepTitle));
+    }
+    if (typeof onAddDivider === 'function') {
+        actions.appendChild(createAddRowButton('/', insertIndex, onAddDivider, dividerTitle, 'is-divider'));
+    }
+    cell.appendChild(actions);
     wrapperRow.appendChild(cell);
     container.appendChild(wrapperRow);
 }
 
 export function renderChecklist(container, data, options = {}) {
-    const { onUpdatePass, onUpdateStep, onHighlightStep, onScenarioTitleUpdate, onAddStep, onOpenChecklistContextMenu } = options;
+    const { onUpdatePass, onUpdateStep, onHighlightStep, onScenarioTitleUpdate, onAddStep, onAddDivider, onOpenChecklistContextMenu } = options;
     if (!container) return;
+    const canInsertRows = typeof onAddStep === 'function' || typeof onAddDivider === 'function';
 
     const blurOnEscape = (editable) => {
         editable.addEventListener('keydown', (event) => {
@@ -514,8 +529,13 @@ export function renderChecklist(container, data, options = {}) {
         emptyRow.className = 'empty-state';
         emptyRow.innerHTML = '<td colspan="5">No steps in this scenario file.</td>';
         container.appendChild(emptyRow);
-        if (typeof onAddStep === 'function') {
-            appendAddRowButton(container, 0, onAddStep);
+        if (canInsertRows) {
+            appendAddRowButton(container, 0, {
+                stepTitle: 'Add first step',
+                dividerTitle: 'Add first divider',
+                onAddStep,
+                onAddDivider
+            });
         }
         return;
     }
@@ -579,15 +599,21 @@ export function renderChecklist(container, data, options = {}) {
                     onOpenChecklistContextMenu({ index, x: event.clientX, y: event.clientY });
                 });
             }
-            if (index === 0 && typeof onAddStep === 'function') {
-                appendAddRowButton(container, 0, onAddStep, {
-                    title: 'Add step above',
-                    zoneClassName: 'is-before-first-row'
+            if (index === 0 && canInsertRows) {
+                appendAddRowButton(container, 0, {
+                    stepTitle: 'Add step above',
+                    dividerTitle: 'Add divider above',
+                    zoneClassName: 'is-before-first-row',
+                    onAddStep,
+                    onAddDivider
                 });
             }
             container.appendChild(dividerRow);
-            if (typeof onAddStep === 'function') {
-                appendAddRowButton(container, index + 1, onAddStep);
+            if (canInsertRows) {
+                appendAddRowButton(container, index + 1, {
+                    onAddStep,
+                    onAddDivider
+                });
             }
             return;
         }
@@ -647,15 +673,21 @@ export function renderChecklist(container, data, options = {}) {
         }
 
         tr.querySelector('.col-pass input').addEventListener('change', (e) => onUpdatePass(index, e.target.checked));
-        if (index === 0 && typeof onAddStep === 'function') {
-            appendAddRowButton(container, 0, onAddStep, {
-                title: 'Add step above',
-                zoneClassName: 'is-before-first-row'
+        if (index === 0 && canInsertRows) {
+            appendAddRowButton(container, 0, {
+                stepTitle: 'Add step above',
+                dividerTitle: 'Add divider above',
+                zoneClassName: 'is-before-first-row',
+                onAddStep,
+                onAddDivider
             });
         }
         container.appendChild(tr);
-        if (typeof onAddStep === 'function') {
-            appendAddRowButton(container, index + 1, onAddStep);
+        if (canInsertRows) {
+            appendAddRowButton(container, index + 1, {
+                onAddStep,
+                onAddDivider
+            });
         }
     });
 }
