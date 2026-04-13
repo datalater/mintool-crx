@@ -1365,6 +1365,11 @@
     border-color: rgba(248, 81, 73, 0.3);
   }
 
+  .cell-content .checklist-line-spacer {
+    display: block;
+    height: 0.5em;
+  }
+
   .scenario-meta {
     display: block;
     max-width: min(60%, 640px);

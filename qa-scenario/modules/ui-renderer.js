@@ -79,6 +79,9 @@ const CHECKLIST_ALERTS = {
 };
 
 function renderChecklistInlineToken(token) {
+    if (token === '\\n') {
+        return '<span class="checklist-line-spacer" role="separator"></span>';
+    }
     const alertConfig = getChecklistAlertConfig(token);
     if (alertConfig) {
         return `<span class="checklist-alert-token checklist-alert-token--${alertConfig.className}" title="${alertConfig.label}"><span class="checklist-alert-token__icon" aria-hidden="true">${alertConfig.icon}</span><span class="checklist-alert-token__label">${alertConfig.label}</span></span>`;
