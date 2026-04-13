@@ -2,6 +2,7 @@
 @import url("styles/reset-layer.css") layer(reset);
 @import url("styles/feature-export.css") layer(features);
 @import url("styles/feature-resizer.css") layer(features);
+@import url("styles/feature-shortcuts.css") layer(features);
 
 @layer base {
   body {
@@ -37,6 +38,8 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    min-width: 0;
+    flex-shrink: 1;
   }
 
   .logo .icon {
@@ -49,6 +52,10 @@
     font-size: 14px;
     font-weight: 600;
     letter-spacing: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
   }
 
   .app-version {
@@ -68,6 +75,7 @@
     display: flex;
     align-items: center;
     gap: 12px;
+    flex-shrink: 0;
   }
 
   .bound-file-group {

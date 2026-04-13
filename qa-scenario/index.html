@@ -11,7 +11,7 @@
         <header class="app-header">
             <div class="logo">
                 <span class="icon">📋</span>
-                <h1>QA Scenario Checker</h1>
+                <h1 title="QA Scenario Checker">QA Scenario Checker</h1>
                 <span id="app-version" class="app-version" title="Current version">v-</span>
             </div>
             <div class="header-controls">
@@ -91,6 +91,7 @@
             <section class="pane editor-pane" id="editor-pane">
                 <div class="pane-header">
                     <h2>JSON Editor</h2>
+                    <button id="btn-keyboard-shortcuts" class="btn-help" type="button" title="Keyboard shortcuts">?</button>
                     <div class="editor-header-controls">
                         <div id="save-indicator" class="save-indicator is-saved" role="status" aria-live="polite">
                             <span id="save-indicator-time" class="save-indicator-time">0000-00-00 00:00:00</span>
@@ -211,6 +212,30 @@
     </div>
     <div id="checklist-context-menu" class="tree-context-menu" role="menu" hidden>
         <button id="checklist-context-delete" class="tree-context-menu-item danger" type="button" role="menuitem">행 삭제</button>
+    </div>
+    <div id="keyboard-shortcuts-backdrop" class="shortcuts-backdrop is-hidden" aria-hidden="true"></div>
+    <div id="keyboard-shortcuts-modal" class="shortcuts-modal is-hidden" role="dialog" aria-label="Keyboard shortcuts" aria-modal="true">
+        <div class="shortcuts-modal-header">
+            <h3>Keyboard Shortcuts</h3>
+            <button id="btn-shortcuts-close" class="shortcuts-modal-close" type="button" aria-label="Close">&times;</button>
+        </div>
+        <div class="shortcuts-modal-body">
+            <table class="shortcuts-table">
+                <thead><tr><th>Action</th><th>Shortcut</th></tr></thead>
+                <tbody>
+                    <tr><td>Save / Format</td><td><kbd>⌘</kbd> <kbd>S</kbd></td></tr>
+                    <tr><td>Undo</td><td><kbd>⌘</kbd> <kbd>Z</kbd></td></tr>
+                    <tr><td>Redo</td><td><kbd>⌘</kbd> <kbd>⇧</kbd> <kbd>Z</kbd></td></tr>
+                    <tr><td>Find</td><td><kbd>⌘</kbd> <kbd>F</kbd></td></tr>
+                    <tr><td>Find &amp; Replace</td><td><kbd>⌘</kbd> <kbd>⌥</kbd> <kbd>F</kbd></td></tr>
+                    <tr><td>Next match</td><td><kbd>Enter</kbd></td></tr>
+                    <tr><td>Previous match</td><td><kbd>⇧</kbd> <kbd>Enter</kbd></td></tr>
+                    <tr><td>Close find</td><td><kbd>Esc</kbd></td></tr>
+                    <tr><td>Cursor back</td><td><kbd>⌘</kbd> <kbd>-</kbd></td></tr>
+                    <tr><td>Cursor forward</td><td><kbd>⌘</kbd> <kbd>⇧</kbd> <kbd>-</kbd></td></tr>
+                </tbody>
+            </table>
+        </div>
     </div>
     <script type="module" src="script.js"></script>
 </body>

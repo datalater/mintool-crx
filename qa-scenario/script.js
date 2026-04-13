@@ -96,6 +96,10 @@ const EL = {
     treeContextReadonly: document.getElementById('tree-context-readonly'),
     checklistContextMenu: document.getElementById('checklist-context-menu'),
     checklistContextDelete: document.getElementById('checklist-context-delete'),
+    btnKeyboardShortcuts: document.getElementById('btn-keyboard-shortcuts'),
+    shortcutsModal: document.getElementById('keyboard-shortcuts-modal'),
+    shortcutsBackdrop: document.getElementById('keyboard-shortcuts-backdrop'),
+    btnShortcutsClose: document.getElementById('btn-shortcuts-close'),
     fileTreePanel: document.querySelector('.file-tree-panel'),
     fileTreeResizer: document.getElementById('file-tree-resizer'),
     appContent: document.querySelector('.app-content'),
@@ -1081,6 +1085,16 @@ function closeChecklistContextMenu() {
     if (!EL.checklistContextMenu) return;
     EL.checklistContextMenu.hidden = true;
     checklistContextTarget = null;
+}
+
+function openShortcutsModal() {
+    if (EL.shortcutsModal) EL.shortcutsModal.classList.remove('is-hidden');
+    if (EL.shortcutsBackdrop) EL.shortcutsBackdrop.classList.remove('is-hidden');
+}
+
+function closeShortcutsModal() {
+    if (EL.shortcutsModal) EL.shortcutsModal.classList.add('is-hidden');
+    if (EL.shortcutsBackdrop) EL.shortcutsBackdrop.classList.add('is-hidden');
 }
 
 function handleChecklistContextDelete() {
@@ -2563,6 +2577,7 @@ function setupWindowListeners() {
         if (event.key !== 'Escape') return;
         closeTreeContextMenu();
         closeChecklistContextMenu();
+        closeShortcutsModal();
     });
     if (EL.treeContextRename) {
         EL.treeContextRename.addEventListener('click', handleTreeContextRename);
@@ -2575,6 +2590,15 @@ function setupWindowListeners() {
     }
     if (EL.checklistContextDelete) {
         EL.checklistContextDelete.addEventListener('click', handleChecklistContextDelete);
+    }
+    if (EL.btnKeyboardShortcuts) {
+        EL.btnKeyboardShortcuts.addEventListener('click', openShortcutsModal);
+    }
+    if (EL.btnShortcutsClose) {
+        EL.btnShortcutsClose.addEventListener('click', closeShortcutsModal);
+    }
+    if (EL.shortcutsBackdrop) {
+        EL.shortcutsBackdrop.addEventListener('click', closeShortcutsModal);
     }
 }
 
