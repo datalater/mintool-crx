@@ -109,9 +109,27 @@ function normalizeStepFieldForEditor(value) {
 
 export function normalizeChecklistDividerValue(value) {
     if (value === true) return true;
-    if (typeof value !== 'string') return null;
-    const trimmed = value.trim();
-    return trimmed.length > 0 ? trimmed : null;
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        return trimmed.length > 0 ? trimmed : null;
+    }
+    if (value && typeof value === 'object' && 'value' in value) {
+        return normalizeChecklistDividerValue(value.value);
+    }
+    return null;
+}
+
+export function getChecklistDividerColor(step) {
+    const divider = step?.divider;
+    if (divider && typeof divider === 'object' && typeof divider.color === 'string') {
+        return divider.color.trim() || null;
+    }
+    return null;
+}
+
+export function buildChecklistDividerData(textValue, color) {
+    if (!color) return textValue;
+    return { value: textValue, color };
 }
 
 export function normalizeEditableChecklistDividerValue(value) {
@@ -619,17 +637,28 @@ export function renderChecklist(container, data, options = {}) {
             dividerContent.dataset.field = 'divider';
 
             const rawDividerText = getChecklistDividerTitle(step);
+            const dividerColor = getChecklistDividerColor(step);
             dividerContent.dataset.rawValue = rawDividerText;
+            if (dividerColor) dividerContent.dataset.dividerColor = dividerColor;
             dividerContent.innerHTML = formatChecklistCellContent(rawDividerText);
+
+            if (dividerColor) {
+                dividerRow.style.setProperty('--divider-color', dividerColor);
+                dividerRow.classList.add('has-custom-color');
+            }
 
             dividerContent.addEventListener('focus', (event) => {
                 event.target.textContent = event.target.dataset.rawValue;
             });
             dividerContent.addEventListener('input', (event) => {
-                onUpdateStep(index, 'divider', event.target.innerText);
+                const color = event.target.dataset.dividerColor || '';
+                const text = event.target.innerText;
+                onUpdateStep(index, 'divider', color ? buildChecklistDividerData(text, color) : text);
             });
             dividerContent.addEventListener('blur', (event) => {
-                const nextDividerValue = normalizeEditableChecklistDividerValue(event.target.innerText);
+                const color = event.target.dataset.dividerColor || '';
+                const nextTextValue = normalizeEditableChecklistDividerValue(event.target.innerText);
+                const nextDividerValue = color ? buildChecklistDividerData(nextTextValue, color) : nextTextValue;
                 onUpdateStep(index, 'divider', nextDividerValue);
 
                 const nextLabel = getChecklistDividerTitle({ divider: nextDividerValue });
@@ -661,7 +690,7 @@ export function renderChecklist(container, data, options = {}) {
                 dividerRow.addEventListener('contextmenu', (event) => {
                     event.preventDefault();
                     event.stopPropagation();
-                    onOpenChecklistContextMenu({ index, x: event.clientX, y: event.clientY });
+                    onOpenChecklistContextMenu({ index, isDivider: true, x: event.clientX, y: event.clientY });
                 });
             }
             if (index === 0 && canInsertRows) {

@@ -101,6 +101,7 @@ const EL = {
     shortcutsBackdrop: document.getElementById('keyboard-shortcuts-backdrop'),
     btnShortcutsClose: document.getElementById('btn-shortcuts-close'),
     loadingOverlay: document.getElementById('loading-overlay'),
+    checklistContextColor: document.getElementById('checklist-context-color'),
     fileTreePanel: document.querySelector('.file-tree-panel'),
     fileTreeResizer: document.getElementById('file-tree-resizer'),
     appContent: document.querySelector('.app-content'),
@@ -1081,6 +1082,10 @@ function openChecklistContextMenu(target) {
     if (!EL.checklistContextMenu || target == null) return;
     checklistContextTarget = target;
 
+    if (EL.checklistContextColor) {
+        EL.checklistContextColor.hidden = !target.isDivider;
+    }
+
     const menuWidth = 160;
     const menuHeight = 40;
     const maxLeft = Math.max(8, window.innerWidth - menuWidth - 8);
@@ -1115,6 +1120,22 @@ function handleChecklistContextDelete() {
     if (!currentData || !Array.isArray(currentData.steps)) return;
     if (idx < 0 || idx >= currentData.steps.length) return;
     currentData.steps.splice(idx, 1);
+    syncToEditor();
+    renderChecklist();
+    closeChecklistContextMenu();
+}
+
+function handleChecklistContextColorClick(event) {
+    const btn = event.target.closest('[data-color]');
+    if (!btn || checklistContextTarget == null) return;
+    const idx = checklistContextTarget.index;
+    if (!currentData || !Array.isArray(currentData.steps)) return;
+    const step = currentData.steps[idx];
+    if (!step || !UI.isChecklistDividerStep(step)) return;
+
+    const color = btn.dataset.color || '';
+    const textValue = UI.normalizeChecklistDividerValue(step.divider) || true;
+    step.divider = UI.buildChecklistDividerData(textValue, color);
     syncToEditor();
     renderChecklist();
     closeChecklistContextMenu();
@@ -1685,7 +1706,7 @@ function renderChecklist() {
         },
         onUpdateStep: (idx, field, val) => {
             if (field === 'divider') {
-                currentData.steps[idx].divider = UI.normalizeEditableChecklistDividerValue(val);
+                currentData.steps[idx].divider = val;
                 syncToEditor();
                 return;
             }
@@ -2602,6 +2623,9 @@ function setupWindowListeners() {
     }
     if (EL.checklistContextDelete) {
         EL.checklistContextDelete.addEventListener('click', handleChecklistContextDelete);
+    }
+    if (EL.checklistContextColor) {
+        EL.checklistContextColor.addEventListener('click', handleChecklistContextColorClick);
     }
     if (EL.btnKeyboardShortcuts) {
         EL.btnKeyboardShortcuts.addEventListener('click', openShortcutsModal);

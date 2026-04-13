@@ -118,9 +118,17 @@ function buildRequiredStepWithDefaults(input) {
 
 function normalizeDividerValue(value) {
     if (value === true) return true;
-    if (typeof value !== 'string') return null;
-    const trimmed = value.trim();
-    return trimmed.length > 0 ? trimmed : null;
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        return trimmed.length > 0 ? trimmed : null;
+    }
+    if (value && typeof value === 'object' && 'value' in value) {
+        const inner = normalizeDividerValue(value.value);
+        if (inner === null) return null;
+        const color = typeof value.color === 'string' ? value.color.trim() : '';
+        return color ? { value: inner, color } : inner;
+    }
+    return null;
 }
 
 function toChecklistArray(value) {
