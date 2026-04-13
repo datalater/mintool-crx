@@ -100,6 +100,7 @@ const EL = {
     shortcutsModal: document.getElementById('keyboard-shortcuts-modal'),
     shortcutsBackdrop: document.getElementById('keyboard-shortcuts-backdrop'),
     btnShortcutsClose: document.getElementById('btn-shortcuts-close'),
+    loadingOverlay: document.getElementById('loading-overlay'),
     fileTreePanel: document.querySelector('.file-tree-panel'),
     fileTreeResizer: document.getElementById('file-tree-resizer'),
     appContent: document.querySelector('.app-content'),
@@ -417,11 +418,22 @@ async function attemptRestoreBoundDirectoryConnection() {
     const handle = persisted?.handle;
     if (!handle) return;
 
+    showLoadingOverlay();
     try {
         await bindAndLoadFromDirectoryHandle(handle, { isRestore: true });
     } catch (error) {
         console.warn('[qa-scenario] auto-reconnect for directory failed', error);
+    } finally {
+        hideLoadingOverlay();
     }
+}
+
+function showLoadingOverlay() {
+    if (EL.loadingOverlay) EL.loadingOverlay.classList.remove('is-hidden');
+}
+
+function hideLoadingOverlay() {
+    if (EL.loadingOverlay) EL.loadingOverlay.classList.add('is-hidden');
 }
 
 function persist() {

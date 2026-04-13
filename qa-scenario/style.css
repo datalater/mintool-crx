@@ -3,6 +3,7 @@
 @import url("styles/feature-export.css") layer(features);
 @import url("styles/feature-resizer.css") layer(features);
 @import url("styles/feature-shortcuts.css") layer(features);
+@import url("styles/feature-loading.css") layer(features);
 
 @layer base {
   body {
