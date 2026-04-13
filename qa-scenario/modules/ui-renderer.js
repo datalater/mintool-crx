@@ -620,7 +620,7 @@ export function renderChecklist(container, data, options = {}) {
 
             const rawDividerText = getChecklistDividerTitle(step);
             dividerContent.dataset.rawValue = rawDividerText;
-            dividerContent.textContent = rawDividerText;
+            dividerContent.innerHTML = formatChecklistCellContent(rawDividerText);
 
             dividerContent.addEventListener('focus', (event) => {
                 event.target.textContent = event.target.dataset.rawValue;
@@ -634,7 +634,7 @@ export function renderChecklist(container, data, options = {}) {
 
                 const nextLabel = getChecklistDividerTitle({ divider: nextDividerValue });
                 event.target.dataset.rawValue = nextLabel;
-                event.target.textContent = nextLabel;
+                event.target.innerHTML = formatChecklistCellContent(nextLabel);
             });
             blurOnEscape(dividerContent);
 
