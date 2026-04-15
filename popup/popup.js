@@ -28,14 +28,4 @@ document.getElementById("open-popup").addEventListener("click", async () => {
     window.close();
   }
 });
-document
-  .getElementById("open-qa-scenario")
-  .addEventListener("click", async () => {
-    chrome.windows.create({
-      url: chrome.runtime.getURL("qa-scenario/index.html"),
-      type: "popup",
-      width: 1400,
-      height: 900,
-    });
-    window.close();
-  });
+
