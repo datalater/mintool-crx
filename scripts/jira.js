@@ -1,3 +1,6 @@
+(async () => {
+if (!await isFeatureEnabled('jira')) return;
+
 const JIRA_TICKET_ATTRIBUTE = {
   name: "data-testid",
   value:
@@ -233,3 +236,5 @@ function displayCopySuccessToast(toastMessage) {
     hideCopySuccessToastTimeoutId = null;
   }, COPY_SUCCESS_TOAST_DISPLAY_DURATION_MS);
 }
+
+})();

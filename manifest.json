@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "default_locale": "en",
   "name": "MinTool",
-  "version": "2.2.6",
+  "version": "3.0.0",
   "author": "Min <the7mincheol@gmail.com>",
   "description": "Toolbox for anything",
   "icons": {
@@ -11,7 +11,7 @@
     "48": "images/icon-48.png",
     "128": "images/icon-128.png"
   },
-  "permissions": ["declarativeNetRequest", "activeTab", "contextMenus"],
+  "permissions": ["declarativeNetRequest", "activeTab", "contextMenus", "storage"],
   "background": {
     "service_worker": "background.js"
   },
@@ -36,6 +36,7 @@
     },
     {
       "js": [
+        "lib/feature-guard.js",
         "lib/global.js",
         "lib/components.js",
         "lib/log.js",

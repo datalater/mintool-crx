@@ -1,3 +1,6 @@
+(async () => {
+if (!await isFeatureEnabled('adBlock')) return;
+
 const COMMAND = Object.freeze({
   remove: (element) => {
     element.remove();
@@ -109,3 +112,5 @@ function injectStylesheetForAdblock(text) {
   style.textContent = text;
   document.head.appendChild(style);
 }
+
+})();

@@ -1,4 +1,6 @@
-(function main() {
+(async function main() {
+  if (!await isFeatureEnabled('tossinvest')) return;
+
   const cleanups = [];
 
   runner();

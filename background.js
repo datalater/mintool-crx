@@ -58,8 +58,22 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 });
 
+const MENU_FEATURE_MAP = {
+  [MENU_IDS.REMOVE_DOM]: 'domEraser',
+  [MENU_IDS.HIDE_DOM]: 'domEraser',
+  [MENU_IDS.UNDO_DOM]: 'domEraser',
+  [MENU_IDS.EDIT_STYLE]: 'domStyleEditor',
+  [MENU_IDS.VIRTUAL_FULLSCREEN]: 'virtualFullscreen',
+};
+
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (!tab?.id) return;
+
+  const featureKey = MENU_FEATURE_MAP[info.menuItemId];
+  if (featureKey) {
+    const { features = {} } = await chrome.storage.sync.get('features');
+    if (features[featureKey] === false) return;
+  }
 
   if ([MENU_IDS.REMOVE_DOM, MENU_IDS.HIDE_DOM, MENU_IDS.UNDO_DOM].includes(info.menuItemId)) {
     const action = info.menuItemId.replace("-dom", "");

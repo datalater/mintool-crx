@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MinTool Settings</title>
+  <link rel="stylesheet" href="settings.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>MinTool Settings</h1>
+      <p class="subtitle">기능을 켜거나 끌 수 있습니다. 변경 후 페이지를 새로고침하세요.</p>
+      <div class="bulk-actions">
+        <button id="btn-enable-all" type="button" class="btn-bulk">모두 켜기</button>
+        <button id="btn-disable-all" type="button" class="btn-bulk">모두 끄기</button>
+      </div>
+    </header>
+    <main id="feature-list"></main>
+  </div>
+  <script src="../lib/feature-guard.js"></script>
+  <script src="settings.js"></script>
+</body>
+</html>

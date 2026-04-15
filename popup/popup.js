@@ -14,6 +14,11 @@ function initI18n() {
 
 document.addEventListener("DOMContentLoaded", initI18n);
 
+document.getElementById("open-settings").addEventListener("click", () => {
+  chrome.tabs.create({ url: chrome.runtime.getURL("settings/settings.html") });
+  window.close();
+});
+
 document.getElementById("open-popup").addEventListener("click", async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
