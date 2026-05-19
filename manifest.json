@@ -11,7 +11,12 @@
     "48": "images/icon-48.png",
     "128": "images/icon-128.png"
   },
-  "permissions": ["declarativeNetRequest", "activeTab", "contextMenus", "storage"],
+  "permissions": [
+    "declarativeNetRequest",
+    "activeTab",
+    "contextMenus",
+    "storage"
+  ],
   "background": {
     "service_worker": "background.js"
   },
@@ -29,7 +34,11 @@
   },
   "content_scripts": [
     {
-      "js": ["lib/global.js", "lib/virtual-fullscreen-main.js", "lib/toastify.js"],
+      "js": [
+        "lib/global.js",
+        "lib/virtual-fullscreen-main.js",
+        "lib/toastify.js"
+      ],
       "matches": ["<all_urls>"],
       "world": "MAIN",
       "run_at": "document_start"
@@ -44,7 +53,9 @@
         "lib/dom-utils.js",
         "lib/toastify.js",
         "lib/virtual-fullscreen.js",
-        "lib/draggable.js","lib/dom-style-editor.js","lib/dom-eraser.js",
+        "lib/draggable.js",
+        "lib/dom-style-editor.js",
+        "lib/dom-eraser.js",
         "lib/vue-min.js"
       ],
       "matches": ["<all_urls>"]
