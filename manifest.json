@@ -36,9 +36,9 @@
   "content_scripts": [
     {
       "js": [
-        "lib/global.js",
-        "lib/virtual-fullscreen-main.js",
-        "lib/toastify.js"
+        "utils/content-main/navigation.global.js",
+        "services/virtual-fullscreen/content-main.js",
+        "utils/vendor/toastify.js"
       ],
       "matches": ["<all_urls>"],
       "world": "MAIN",
@@ -46,46 +46,46 @@
     },
     {
       "js": [
-        "lib/feature-guard.js",
-        "lib/global.js",
-        "lib/components.js",
-        "lib/log.js",
-        "lib/wait-for-element.js",
-        "lib/dom-utils.js",
-        "lib/toastify.js",
-        "lib/virtual-fullscreen.js",
-        "lib/draggable.js",
-        "lib/dom-style-editor.js",
-        "lib/dom-eraser.js",
-        "lib/vue-min.js"
+        "utils/content-isolated/feature-guard.global.js",
+        "utils/content-isolated/global.global.js",
+        "utils/content-isolated/components.global.js",
+        "utils/content-isolated/log.global.js",
+        "utils/content-isolated/wait-for-element.global.js",
+        "utils/content-isolated/dom.global.js",
+        "utils/vendor/toastify.js",
+        "services/virtual-fullscreen/content-isolated.js",
+        "utils/content-isolated/draggable.global.js",
+        "services/dom-tools/content-isolated/style-editor.js",
+        "services/dom-tools/content-isolated/eraser.js",
+        "utils/vendor/vue-min.js"
       ],
       "matches": ["<all_urls>"]
     },
     {
       "js": [
-        "lib/github/github-context.js",
-        "lib/github/github-auto-refresh.js",
-        "lib/github/github-notification-filters.js",
-        "lib/github/github-comment-shortcut.js",
-        "lib/github/github-shortcut.js",
-        "lib/github/github-pr-commit-auto-embed.js"
+        "services/github/content-isolated/context.js",
+        "services/github/content-isolated/auto-refresh.js",
+        "services/github/content-isolated/notification-filters.js",
+        "services/github/content-isolated/comment-shortcut.js",
+        "services/github/content-isolated/shortcut.js",
+        "services/github/content-isolated/pr-commit-auto-embed.js"
       ],
       "matches": ["<all_urls>"]
     },
     {
-      "js": ["scripts/ad-block.js"],
+      "js": ["services/ad-block/content-isolated.js"],
       "matches": ["<all_urls>"]
     },
     {
-      "js": ["scripts/github.js"],
+      "js": ["services/github/content-isolated/site.js"],
       "matches": ["https://github.com/*"]
     },
     {
-      "js": ["scripts/tossinvest.js"],
+      "js": ["services/toss-invest/content-isolated.js"],
       "matches": ["https://tossinvest.com/*"]
     },
     {
-      "js": ["scripts/jira.js"],
+      "js": ["services/jira/content-isolated.js"],
       "matches": ["https://*.atlassian.net/*", "https://atlassian.net/*"]
     }
   ]

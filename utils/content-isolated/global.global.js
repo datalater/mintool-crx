@@ -5,11 +5,6 @@ const EVENT_PUSH_STATE = "[mintool] custom-push-state";
 const EVENT_REPLACE_STATE = "[mintool] custom-replace-state";
 
 const mintool = {
-  init() {
-    monkeyPatchPushState();
-    monkeyPatchReplaceState();
-  },
-
   observeUrlChange: function observeUrlChange(handler, delay = 300) {
     const BATCH_DELAY = delay;
 
@@ -186,11 +181,6 @@ Object.assign(globalThis, {
   createElement,
   templateToElement,
 });
-
-// MAIN world에서 실행될 때만 초기화 (최상위 프레임에서만 실행)
-if (window.top === window.self) {
-  mintool.init();
-}
 
 ////////////////////////////////////////////
 
@@ -571,27 +561,4 @@ function waitForElement(root, selector, timeout = 1000) {
       return node instanceof Element;
     }
   });
-}
-
-// === MAIN world에서만 작동 (manifest.json에서 world: "MAIN" 설정을 지칭) === //
-function monkeyPatchPushState() {
-  const originalPushState = history.pushState;
-
-  history.pushState = function (...args) {
-    originalPushState.apply(history, args);
-
-    const navEvent = new CustomEvent(EVENT_PUSH_STATE);
-    window.dispatchEvent(navEvent);
-  };
-}
-
-function monkeyPatchReplaceState() {
-  const originalReplaceState = history.replaceState;
-
-  history.replaceState = function (...args) {
-    originalReplaceState.apply(history, args);
-
-    const navEvent = new CustomEvent(EVENT_REPLACE_STATE);
-    window.dispatchEvent(navEvent);
-  };
 }

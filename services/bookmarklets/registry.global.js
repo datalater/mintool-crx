@@ -1,5 +1,4 @@
-var mtb = {
-  bookmarklets: Object.freeze([
+var MINTOOL_BOOKMARKLETS = Object.freeze([
     {
       id: "outline",
       title: "outline",
@@ -160,53 +159,8 @@ var mtb = {
             if (f[i].type.toLowerCase() == "password") s += f[i].value + "\n";
           }
         }
-        if (s) mtb.utils.showPopup("Passwords in forms on this page:\n\n" + s);
+        if (s) MINTOOL_CONTENT_POPUP.show("Passwords in forms on this page:\n\n" + s);
         else alert("There are no passwords in forms on this page.");
       },
     },
-  ]),
-
-  utils: Object.freeze({
-    showPopup: function showPopup(e) {
-      let t = document.querySelector("[data-copyable-popup]");
-      t && t.remove();
-      let l = document.createElement("div");
-      ((l.dataset.copyablePopup = "true"),
-        (l.style.position = "fixed"),
-        (l.style.top = "24px"),
-        (l.style.right = "24px"),
-        (l.style.zIndex = "999999"),
-        (l.style.width = "520px"),
-        (l.style.maxWidth = "calc(100vw - 48px)"),
-        (l.style.maxHeight = "calc(100vh - 48px)"),
-        (l.style.padding = "12px"),
-        (l.style.background = "white"),
-        (l.style.border = "1px solid #ddd"),
-        (l.style.borderRadius = "8px"),
-        (l.style.boxShadow = "0 8px 24px rgba(0, 0, 0, 0.18)"));
-      let o = document.createElement("button");
-      ((o.textContent = "Close"),
-        (o.style.all = "revert"),
-        (o.style.marginBottom = "8px"),
-        o.addEventListener("click", () => {
-          l.remove();
-        }));
-      let p = document.createElement("textarea");
-      ((p.value = e),
-        (p.readOnly = !0),
-        (p.style.width = "100%"),
-        (p.style.overflow = "auto"),
-        (p.style.height = "320px"),
-        (p.style.boxSizing = "border-box"),
-        (p.style.resize = "none"),
-        (p.style.fontFamily = "monospace"),
-        (p.style.fontSize = "13px"),
-        (p.style.lineHeight = "1.5"),
-        l.appendChild(o),
-        l.appendChild(p),
-        document.body.appendChild(l),
-        p.focus(),
-        p.select());
-    },
-  }),
-};
+  ]);

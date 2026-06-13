@@ -1,4 +1,4 @@
-importScripts("lib/bookmarklets.js");
+importScripts("services/bookmarklets/registry.global.js");
 
 const MENU_IDS = {
   PARENT: "mintool-parent",
@@ -31,7 +31,7 @@ chrome.runtime.onInstalled.addListener(() => {
     contexts: ["all"],
   });
 
-  mtb.bookmarklets.forEach((bookmarklet) => {
+  MINTOOL_BOOKMARKLETS.forEach((bookmarklet) => {
     chrome.contextMenus.create({
       id: getBookmarkletMenuId(bookmarklet.id),
       parentId: MENU_IDS.BOOKMARKLETS_PARENT,
@@ -170,7 +170,7 @@ function getBookmarkletByMenuId(menuItemId) {
   const bookmarkletId = String(menuItemId).replace(/^bookmarklet:/, "");
 
   if (bookmarkletId === menuItemId) return null;
-  return mtb.bookmarklets.find(
+  return MINTOOL_BOOKMARKLETS.find(
     (bookmarklet) => bookmarklet.id === bookmarkletId,
   );
 }
@@ -181,13 +181,16 @@ async function runBookmarklet(tab, bookmarklet) {
   try {
     await chrome.scripting.executeScript({
       target: { tabId: tab.id },
-      files: ["lib/bookmarklets.js"],
+      files: [
+        "utils/content-isolated/popup.global.js",
+        "services/bookmarklets/registry.global.js",
+      ],
     });
     await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       args: [bookmarklet.id],
       func: function runBookmarkletById(bookmarkletId) {
-        const bookmarklet = mtb.bookmarklets.find(
+        const bookmarklet = MINTOOL_BOOKMARKLETS.find(
           (item) => item.id === bookmarkletId,
         );
 
