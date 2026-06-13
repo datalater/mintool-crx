@@ -5,6 +5,7 @@ const MENU_IDS = {
   BOOKMARKLETS_PARENT: "bookmarklets",
   REMOVE_DOM: "remove-dom",
   HIDE_DOM: "hide-dom",
+  COVER_DOM: "cover-dom",
   EDIT_STYLE: "edit-style",
   VIRTUAL_FULLSCREEN: "virtual-fullscreen",
   UNDO_DOM: "undo-dom",
@@ -55,6 +56,13 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 
   chrome.contextMenus.create({
+    id: MENU_IDS.COVER_DOM,
+    parentId: MENU_IDS.PARENT,
+    title: "DOM 가리기 (덮어서 숨김)",
+    contexts: ["all"],
+  });
+
+  chrome.contextMenus.create({
     id: MENU_IDS.EDIT_STYLE,
     parentId: MENU_IDS.PARENT,
     title: "DOM 스타일 편집하기",
@@ -81,6 +89,7 @@ const MENU_FEATURE_MAP = {
   [MENU_IDS.REMOVE_DOM]: "domEraser",
   [MENU_IDS.HIDE_DOM]: "domEraser",
   [MENU_IDS.UNDO_DOM]: "domEraser",
+  [MENU_IDS.COVER_DOM]: "domCoverer",
   [MENU_IDS.EDIT_STYLE]: "domStyleEditor",
   [MENU_IDS.VIRTUAL_FULLSCREEN]: "virtualFullscreen",
 };
@@ -100,12 +109,20 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     )
   ) {
     const action = info.menuItemId.replace("-dom", "");
-    chrome.tabs.sendMessage(tab.id, { action });
+    const frameUrl = await resolveTopChildFrameUrl(tab.id, info.frameId);
+    chrome.tabs.sendMessage(tab.id, { action, frameUrl });
+    return;
+  }
+
+  if (info.menuItemId === MENU_IDS.COVER_DOM) {
+    const frameUrl = await resolveTopChildFrameUrl(tab.id, info.frameId);
+    chrome.tabs.sendMessage(tab.id, { action: "cover", frameUrl });
     return;
   }
 
   if (info.menuItemId === MENU_IDS.EDIT_STYLE) {
-    chrome.tabs.sendMessage(tab.id, { action: "edit-style" });
+    const frameUrl = await resolveTopChildFrameUrl(tab.id, info.frameId);
+    chrome.tabs.sendMessage(tab.id, { action: "edit-style", frameUrl });
     return;
   }
 
@@ -160,6 +177,25 @@ async function setVirtualFullscreenEnabled(tabId, enabled) {
       error,
     );
   }
+}
+
+async function resolveTopChildFrameUrl(tabId, frameId) {
+  if (!frameId) return null;
+
+  try {
+    const frames = await chrome.webNavigation.getAllFrames({ tabId });
+    const frameMap = new Map(frames.map((frame) => [frame.frameId, frame]));
+    return findTopChildFrameUrl(frameMap, frameMap.get(frameId));
+  } catch (error) {
+    console.warn("[background] resolveTopChildFrameUrl failed", error);
+    return null;
+  }
+}
+
+function findTopChildFrameUrl(frameMap, frame) {
+  if (!frame) return null;
+  if (frame.parentFrameId === 0) return frame.url;
+  return findTopChildFrameUrl(frameMap, frameMap.get(frame.parentFrameId));
 }
 
 function getBookmarkletMenuId(bookmarkletId) {

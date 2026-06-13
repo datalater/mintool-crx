@@ -1,5 +1,5 @@
 (async function () {
-  if (!await isFeatureEnabled('domEraser')) return;
+  if (!(await isFeatureEnabled("domEraser"))) return;
 
   let lastRightClickedElement = null;
   let undoStack = [];
@@ -21,15 +21,33 @@
 
   chrome.runtime.onMessage.addListener((message) => {
     if (message.action === "remove") {
-      performAction("remove", lastRightClickedElement);
+      performAction("remove", resolveActionTarget(message));
     } else if (message.action === "hide") {
-      performAction("hide", lastRightClickedElement);
+      performAction("hide", resolveActionTarget(message));
     } else if (message.action === "undo") {
       undoLastAction();
-    } else if (message.action === "edit-style" && window.mintoolOpenStyleEditor) {
-      window.mintoolOpenStyleEditor(lastRightClickedElement);
+    } else if (
+      message.action === "edit-style" &&
+      window.mintoolOpenStyleEditor
+    ) {
+      window.mintoolOpenStyleEditor(resolveActionTarget(message));
     }
   });
+
+  // 우클릭이 cross-origin iframe(예: 광고) 내부에서 일어나면 contextmenu가
+  // 버블링되지 않아 lastRightClickedElement가 갱신되지 않으므로,
+  // background가 알려준 frameUrl로 top document의 <iframe>을 찾아 대체합니다.
+  function resolveActionTarget(message) {
+    const target = resolveCrossFrameTarget(
+      message.frameUrl,
+      lastRightClickedElement,
+    );
+    if (target && target !== lastRightClickedElement) {
+      applyHighlight(target);
+    }
+    lastRightClickedElement = target;
+    return target;
+  }
 
   function applyHighlight(el) {
     if (!el) return;
@@ -44,11 +62,7 @@
       "inset 0 0 0 2px #5477f5, inset 0 0 15px #5477f5",
       "important",
     );
-    el.style.setProperty(
-      "transition",
-      "box-shadow 0.2s",
-      "important",
-    );
+    el.style.setProperty("transition", "box-shadow 0.2s", "important");
 
     if (highlightTimeout) clearTimeout(highlightTimeout);
     highlightTimeout = setTimeout(() => {

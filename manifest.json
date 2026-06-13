@@ -16,7 +16,8 @@
     "activeTab",
     "contextMenus",
     "scripting",
-    "storage"
+    "storage",
+    "webNavigation"
   ],
   "background": {
     "service_worker": "background.js"
@@ -57,6 +58,7 @@
         "utils/content-isolated/draggable.global.js",
         "services/dom-tools/content-isolated/style-editor.js",
         "services/dom-tools/content-isolated/eraser.js",
+        "services/dom-tools/content-isolated/coverer.js",
         "utils/vendor/vue-min.js"
       ],
       "matches": ["<all_urls>"]
