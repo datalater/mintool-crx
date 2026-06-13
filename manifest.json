@@ -15,6 +15,7 @@
     "declarativeNetRequest",
     "activeTab",
     "contextMenus",
+    "scripting",
     "storage"
   ],
   "background": {

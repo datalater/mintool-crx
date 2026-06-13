@@ -1,5 +1,8 @@
+importScripts("lib/bookmarklets.js");
+
 const MENU_IDS = {
   PARENT: "mintool-parent",
+  BOOKMARKLETS_PARENT: "bookmarklets",
   REMOVE_DOM: "remove-dom",
   HIDE_DOM: "hide-dom",
   EDIT_STYLE: "edit-style",
@@ -19,6 +22,22 @@ chrome.runtime.onInstalled.addListener(() => {
     id: MENU_IDS.PARENT,
     title: "MinTool",
     contexts: ["all"],
+  });
+
+  chrome.contextMenus.create({
+    id: MENU_IDS.BOOKMARKLETS_PARENT,
+    parentId: MENU_IDS.PARENT,
+    title: "북마클릿",
+    contexts: ["all"],
+  });
+
+  mtb.bookmarklets.forEach((bookmarklet) => {
+    chrome.contextMenus.create({
+      id: getBookmarkletMenuId(bookmarklet.id),
+      parentId: MENU_IDS.BOOKMARKLETS_PARENT,
+      title: bookmarklet.title,
+      contexts: ["all"],
+    });
   });
 
   chrome.contextMenus.create({
@@ -59,11 +78,11 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 
 const MENU_FEATURE_MAP = {
-  [MENU_IDS.REMOVE_DOM]: 'domEraser',
-  [MENU_IDS.HIDE_DOM]: 'domEraser',
-  [MENU_IDS.UNDO_DOM]: 'domEraser',
-  [MENU_IDS.EDIT_STYLE]: 'domStyleEditor',
-  [MENU_IDS.VIRTUAL_FULLSCREEN]: 'virtualFullscreen',
+  [MENU_IDS.REMOVE_DOM]: "domEraser",
+  [MENU_IDS.HIDE_DOM]: "domEraser",
+  [MENU_IDS.UNDO_DOM]: "domEraser",
+  [MENU_IDS.EDIT_STYLE]: "domStyleEditor",
+  [MENU_IDS.VIRTUAL_FULLSCREEN]: "virtualFullscreen",
 };
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
@@ -71,11 +90,15 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
   const featureKey = MENU_FEATURE_MAP[info.menuItemId];
   if (featureKey) {
-    const { features = {} } = await chrome.storage.sync.get('features');
+    const { features = {} } = await chrome.storage.sync.get("features");
     if (features[featureKey] === false) return;
   }
 
-  if ([MENU_IDS.REMOVE_DOM, MENU_IDS.HIDE_DOM, MENU_IDS.UNDO_DOM].includes(info.menuItemId)) {
+  if (
+    [MENU_IDS.REMOVE_DOM, MENU_IDS.HIDE_DOM, MENU_IDS.UNDO_DOM].includes(
+      info.menuItemId,
+    )
+  ) {
     const action = info.menuItemId.replace("-dom", "");
     chrome.tabs.sendMessage(tab.id, { action });
     return;
@@ -89,6 +112,12 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId === MENU_IDS.VIRTUAL_FULLSCREEN) {
     const enabled = await getVirtualFullscreenState(tab.id);
     await setVirtualFullscreenEnabled(tab.id, !enabled);
+    return;
+  }
+
+  const bookmarklet = getBookmarkletByMenuId(info.menuItemId);
+  if (bookmarklet) {
+    await runBookmarklet(tab, bookmarklet);
   }
 });
 
@@ -126,7 +155,47 @@ async function setVirtualFullscreenEnabled(tabId, enabled) {
       enabled: Boolean(enabled),
     });
   } catch (error) {
-    console.warn("[background] virtual fullscreen toggle delivery failed", error);
+    console.warn(
+      "[background] virtual fullscreen toggle delivery failed",
+      error,
+    );
+  }
+}
+
+function getBookmarkletMenuId(bookmarkletId) {
+  return `bookmarklet:${bookmarkletId}`;
+}
+
+function getBookmarkletByMenuId(menuItemId) {
+  const bookmarkletId = String(menuItemId).replace(/^bookmarklet:/, "");
+
+  if (bookmarkletId === menuItemId) return null;
+  return mtb.bookmarklets.find(
+    (bookmarklet) => bookmarklet.id === bookmarkletId,
+  );
+}
+
+async function runBookmarklet(tab, bookmarklet) {
+  if (!isSupportedTab(tab)) return;
+
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      files: ["lib/bookmarklets.js"],
+    });
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      args: [bookmarklet.id],
+      func: function runBookmarkletById(bookmarkletId) {
+        const bookmarklet = mtb.bookmarklets.find(
+          (item) => item.id === bookmarkletId,
+        );
+
+        if (bookmarklet) bookmarklet.run();
+      },
+    });
+  } catch (error) {
+    console.warn("[background] bookmarklet execution failed", error);
   }
 }
 
