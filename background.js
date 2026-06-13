@@ -138,7 +138,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   }
 });
 
-chrome.runtime.onMessage.addListener((message) => {
+chrome.runtime.onMessage.addListener((message, sender) => {
   if (message.type === "UPDATE_UNDO_MENU") {
     chrome.contextMenus.update(MENU_IDS.UNDO_DOM, {
       title: message.description
@@ -148,7 +148,23 @@ chrome.runtime.onMessage.addListener((message) => {
     });
     return;
   }
+
+  if (message.type === "IFRAME_CONTEXTMENU") {
+    notifyTopFrameOfIframeContextmenu(sender);
+    return;
+  }
 });
+
+async function notifyTopFrameOfIframeContextmenu(sender) {
+  if (!sender.tab?.id) return;
+
+  const frameUrl = await resolveTopChildFrameUrl(sender.tab.id, sender.frameId);
+  if (!frameUrl) return;
+
+  chrome.tabs
+    .sendMessage(sender.tab.id, { action: "highlight-frame", frameUrl })
+    .catch(() => {});
+}
 
 async function getVirtualFullscreenState(tabId) {
   if (!Number.isInteger(tabId)) return false;

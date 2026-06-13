@@ -8,31 +8,46 @@
   document.addEventListener(
     "contextmenu",
     (event) => {
-      // Remove highlight from previous element if it exists
-      if (lastRightClickedElement) {
-        removeHighlight(lastRightClickedElement);
-      }
-
-      lastRightClickedElement = event.target;
-      applyHighlight(lastRightClickedElement);
+      setHighlightedElement(event.target, HIGHLIGHT_COLOR);
     },
     true,
   );
 
+  const HIGHLIGHT_PREVIEW_MS = 300;
+  const HIGHLIGHT_COLOR = "#5477f5";
+  const IFRAME_HIGHLIGHT_COLOR = "#10b981";
+
   chrome.runtime.onMessage.addListener((message) => {
-    if (message.action === "remove") {
-      performAction("remove", resolveActionTarget(message));
-    } else if (message.action === "hide") {
-      performAction("hide", resolveActionTarget(message));
+    if (message.action === "remove" || message.action === "hide") {
+      performEraseAction(message);
     } else if (message.action === "undo") {
       undoLastAction();
+    } else if (message.action === "highlight-frame") {
+      highlightCrossFrameTarget(message.frameUrl);
     } else if (
       message.action === "edit-style" &&
       window.mintoolOpenStyleEditor
     ) {
-      window.mintoolOpenStyleEditor(resolveActionTarget(message));
+      window.mintoolOpenStyleEditor(resolveActionTarget(message).target);
     }
   });
+
+  // 우클릭 시점에 background가 알려준 cross-frame(iframe) 타겟을 즉시
+  // 하이라이트합니다. (DOM 동작 선택 없이도 우클릭만으로 하이라이트되도록)
+  function highlightCrossFrameTarget(frameUrl) {
+    const target = resolveCrossFrameTarget(frameUrl, lastRightClickedElement);
+    if (!target) return;
+    setHighlightedElement(target, IFRAME_HIGHLIGHT_COLOR);
+  }
+
+  // 새로 하이라이트된(iframe 등 cross-frame) 타겟은 사용자가 인지할 시간을
+  // 주기 위해 약간의 지연 후 실제 동작을 수행합니다.
+  function performEraseAction(message) {
+    const { target, isFreshTarget } = resolveActionTarget(message);
+    if (!target) return;
+    const delay = isFreshTarget ? HIGHLIGHT_PREVIEW_MS : 0;
+    setTimeout(() => performAction(message.action, target), delay);
+  }
 
   // 우클릭이 cross-origin iframe(예: 광고) 내부에서 일어나면 contextmenu가
   // 버블링되지 않아 lastRightClickedElement가 갱신되지 않으므로,
@@ -42,24 +57,34 @@
       message.frameUrl,
       lastRightClickedElement,
     );
-    if (target && target !== lastRightClickedElement) {
-      applyHighlight(target);
-    }
-    lastRightClickedElement = target;
-    return target;
+    const isFreshTarget = !!target && target !== lastRightClickedElement;
+    if (isFreshTarget) setHighlightedElement(target, IFRAME_HIGHLIGHT_COLOR);
+    return { target, isFreshTarget };
   }
 
-  function applyHighlight(el) {
+  // 이전에 하이라이트된 엘리먼트를 먼저 복원해야, highlightTimeout이
+  // 새 엘리먼트로 교체되며 이전 엘리먼트의 box-shadow가 영구히 남는 것을 방지함
+  function setHighlightedElement(target, color) {
+    if (lastRightClickedElement) removeHighlight(lastRightClickedElement);
+    lastRightClickedElement = target;
+    applyHighlight(target, color);
+  }
+
+  function applyHighlight(el, color = HIGHLIGHT_COLOR) {
     if (!el) return;
 
     // Save original styles if not already saved
     el.dataset.oldBoxShadow = el.style.boxShadow;
     el.dataset.oldTransition = el.style.transition;
 
-    // 안쪽 glow (inset) — 부모 overflow에 잘리지 않음
+    // 안팎 glow (inset) — 부모 overflow에 잘리지 않음
     el.style.setProperty(
       "box-shadow",
-      "inset 0 0 0 2px #5477f5, inset 0 0 15px #5477f5",
+      [
+        `inset 0 0 0 1px ${color}`, // 안쪽 얇은 라인
+        `inset 0 0 8px ${color}`, // 안쪽 blur/glow
+        `0 0 1px 0.5px ${color}`, // 바깥쪽 아주 얇은 라인
+      ].join(", "),
       "important",
     );
     el.style.setProperty("transition", "box-shadow 0.2s", "important");

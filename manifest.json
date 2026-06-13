@@ -64,6 +64,11 @@
       "matches": ["<all_urls>"]
     },
     {
+      "js": ["utils/content-isolated/iframe-contextmenu-reporter.global.js"],
+      "matches": ["<all_urls>"],
+      "all_frames": true
+    },
+    {
       "js": [
         "services/github/content-isolated/context.js",
         "services/github/content-isolated/auto-refresh.js",
