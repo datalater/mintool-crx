@@ -564,8 +564,9 @@ function displayAutoEmbedSectionInSidebar({
         flex-direction: column;
         gap: 4px;
         border: 1px solid #3d444d;
+        background-color: #21262d;
       }
-      
+
       .cae-header {
         background-color: #192138;
         font-weight: 700;
@@ -582,7 +583,7 @@ function displayAutoEmbedSectionInSidebar({
         justify-content: space-between;
         padding: 8px;
         font-size: 12px;
-        color: white;
+        color: #e6edf3;
       }
 
       .cae-sync-button {
