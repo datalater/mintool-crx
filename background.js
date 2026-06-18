@@ -134,7 +134,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
   const bookmarklet = getBookmarkletByMenuId(info.menuItemId);
   if (bookmarklet) {
-    await runBookmarklet(tab, bookmarklet);
+    await runBookmarklet(tab, bookmarklet, info.frameId);
   }
 });
 
@@ -227,19 +227,24 @@ function getBookmarkletByMenuId(menuItemId) {
   );
 }
 
-async function runBookmarklet(tab, bookmarklet) {
+async function runBookmarklet(tab, bookmarklet, frameId) {
   if (!isSupportedTab(tab)) return;
+
+  // 우클릭한 프레임(iframe 내부 포함)에 직접 주입합니다. frameId가 0이거나
+  // 없으면 top frame을 대상으로 합니다.
+  const target = { tabId: tab.id };
+  if (frameId) target.frameIds = [frameId];
 
   try {
     await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
+      target,
       files: [
         "utils/content-isolated/popup.global.js",
         "services/bookmarklets/registry.global.js",
       ],
     });
     await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
+      target,
       args: [bookmarklet.id],
       func: function runBookmarkletById(bookmarkletId) {
         const bookmarklet = MINTOOL_BOOKMARKLETS.find(
