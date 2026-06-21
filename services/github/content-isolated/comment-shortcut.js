@@ -1,7 +1,7 @@
 function addCommentShortcutsInIssue() {
   const timeout = 5_000;
 
-  const popupOverlaySelector = "[data-component='AnchoredOverlay']";
+  const popupOverlaySelector = "[data-testid='comment-header-hamburger-open']";
 
   const iconButtonSelector = '[data-component="IconButton"][aria-haspopup]';
   const threeDotButtonSelector = `${iconButtonSelector} .octicon-kebab-horizontal`;
