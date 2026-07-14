@@ -14,8 +14,15 @@ function readText(relativePath) {
 
 function testManifestLoadsMainNavigationAndIsolatedGlobal() {
   const manifest = readJson("manifest.json");
-  const [mainWorld, isolatedWorld] = manifest.content_scripts;
+  const mainWorld = manifest.content_scripts.find(
+    (entry) => entry.world === "MAIN",
+  );
+  const isolatedWorld = manifest.content_scripts.find((entry) =>
+    entry.js?.includes("utils/content-isolated/global.global.js"),
+  );
 
+  assert.ok(mainWorld);
+  assert.ok(isolatedWorld);
   assert.equal(mainWorld.world, "MAIN");
   assert.ok(mainWorld.js.includes("utils/content-main/navigation.global.js"));
   assert.ok(!mainWorld.js.includes("utils/content-main/global.global.js"));

@@ -14,6 +14,13 @@ const FEATURE_DEFS = [
     group: 'global',
     defaultEnabled: false,
   },
+  {
+    key: 'consoleToast',
+    label: 'Console Toast',
+    description: 'console/에러를 페이지 토스트로 표시하고 복사 (개발용). DevTools MinTool 패널에서도 토글 가능',
+    group: 'global',
+    defaultEnabled: false,
+  },
   { key: 'githubAutoRefresh', label: '자동 새로고침', description: 'PR/알림 페이지 자동 새로고침', group: 'github' },
   { key: 'githubNotificationFilters', label: '알림 필터', description: '알림 페이지에 커스텀 필터 추가', group: 'github' },
   { key: 'githubCommentShortcut', label: '댓글 단축키', description: 'Issue/PR 댓글 편집 단축키', group: 'github' },

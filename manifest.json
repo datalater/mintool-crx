@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "default_locale": "en",
   "name": "MinTool",
-  "version": "3.1.0",
+  "version": "3.2.0",
   "author": "Min <the7mincheol@gmail.com>",
   "description": "Toolbox for anything",
   "icons": {
@@ -42,10 +42,19 @@
       "js": [
         "utils/content-main/navigation.global.js",
         "services/virtual-fullscreen/content-main.js",
+        "services/console-toast/store.js",
+        "services/console-toast/styles.js",
+        "services/console-toast/ui.js",
+        "services/console-toast/content-main.js",
         "utils/vendor/toastify.js"
       ],
       "matches": ["<all_urls>"],
       "world": "MAIN",
+      "run_at": "document_start"
+    },
+    {
+      "js": ["services/console-toast/content-isolated.js"],
+      "matches": ["<all_urls>"],
       "run_at": "document_start"
     },
     {

@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented in this file.
 
+## [3.2.0] - 2026-07-15
+
+### Added
+- Console Toast (opt-in, default OFF): show `console` / runtime errors as page toasts with copy, close, and hover-to-pause.
+- History panel from the log dock: search, level chip filters, per-level counts, and disable via dock close.
+- Shared DevTools **MinTool** panel hosting CORS Bypass and Console Toast toggles.
+
+### Changed
+- Moved DevTools panel assets to `devtools/panel.*` (no longer under `services/cors-bypass/`).
+
 ## [3.1.0] - 2026-07-15
 
 ### Added

@@ -1,5 +1,1 @@
-chrome.devtools.panels.create(
-  "MinTool",
-  "",
-  "services/cors-bypass/panel.html",
-);
+chrome.devtools.panels.create("MinTool", "", "devtools/panel.html");

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MinTool</title>
+    <link rel="stylesheet" href="panel.css" />
+  </head>
+  <body>
+    <main class="panel">
+      <header class="header">
+        <h1>MinTool</h1>
+        <p class="subtitle">개발/디버깅용 토글. 기본값은 모두 꺼짐입니다.</p>
+      </header>
+
+      <section class="card">
+        <div class="row">
+          <div class="info">
+            <div class="label">CORS Bypass</div>
+            <div class="desc" id="cors-status">꺼짐</div>
+            <p class="hint">응답에 Access-Control-Allow-Origin: * 추가</p>
+          </div>
+          <label class="toggle">
+            <input id="cors-toggle" type="checkbox" data-feature="corsBypass" />
+            <span class="toggle-track"></span>
+          </label>
+        </div>
+
+        <div class="row">
+          <div class="info">
+            <div class="label">Console Toast</div>
+            <div class="desc" id="console-toast-status">꺼짐</div>
+            <p class="hint">
+              console / 에러를 페이지 토스트로 표시. 토스트에서 메시지 복사 가능
+            </p>
+          </div>
+          <label class="toggle">
+            <input
+              id="console-toast-toggle"
+              type="checkbox"
+              data-feature="consoleToast"
+            />
+            <span class="toggle-track"></span>
+          </label>
+        </div>
+      </section>
+
+      <section class="notes">
+        <p>CORS 켜짐 시 아이콘 배지 <strong>CORS</strong>(주황)이 표시됩니다.</p>
+        <p>Console Toast는 현재 탭에만 보이며, 사이트 방문자에게는 보이지 않습니다.</p>
+      </section>
+    </main>
+    <script src="panel.js"></script>
+  </body>
+</html>

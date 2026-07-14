@@ -34,6 +34,13 @@ function testCorsBypassIsOptIn() {
   assert.match(source, /defaultEnabled:\s*false/);
 }
 
+function testDevtoolsPanelListsCorsBypass() {
+  const html = readText("devtools/panel.html");
+  const js = readText("devtools/panel.js");
+  assert.match(html, /CORS Bypass/);
+  assert.match(js, /corsBypass/);
+}
+
 function testCorsRulesBuildExpectedHeaders() {
   const source = readText("services/cors-bypass/rules.global.js");
   const context = {
@@ -68,6 +75,7 @@ function testCorsRulesBuildExpectedHeaders() {
 testManifestDeclaresCorsBypassSurface();
 testBackgroundImportsCorsRules();
 testCorsBypassIsOptIn();
+testDevtoolsPanelListsCorsBypass();
 testCorsRulesBuildExpectedHeaders();
 
 console.log("cors-bypass-static.test.js: ok");

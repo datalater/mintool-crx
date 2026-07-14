@@ -22,7 +22,7 @@ body {
 }
 
 .panel {
-  max-width: 420px;
+  max-width: 480px;
   padding: 20px;
 }
 
@@ -56,6 +56,10 @@ h1 {
   padding: 14px 16px;
 }
 
+.row + .row {
+  border-top: 1px solid #f0f0f0;
+}
+
 .info {
   min-width: 0;
   flex: 1;
@@ -75,6 +79,12 @@ h1 {
 .desc.is-on {
   color: var(--accent);
   font-weight: 600;
+}
+
+.hint {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--muted);
 }
 
 .toggle {
@@ -134,9 +144,4 @@ h1 {
 
 .notes p + p {
   margin-top: 6px;
-}
-
-.notes code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 11px;
 }
