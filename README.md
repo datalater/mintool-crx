@@ -5,6 +5,7 @@
 - [전역 변수 선언 규칙](#전역-변수-선언-규칙)
 - [파일 로딩 방식](#파일-로딩-방식)
 - [북마클릿 추가 방법](#북마클릿-추가-방법)
+- [릴리스](#릴리스)
 - [함께 읽기](#함께-읽기)
 
 ## 모듈화 방법
@@ -194,6 +195,31 @@ await chrome.scripting.executeScript({
 ```
 
 `run()` 안에서는 `document`를 사용할 수 있지만, registry 파일의 top-level에서는 사용할 수 없다. Popup처럼 여러 북마클릿이 재사용하는 DOM 유틸은 `utils/content-isolated/popup.global.js`에 추가하고 `MINTOOL_CONTENT_POPUP.show(...)`처럼 호출한다.
+
+## 릴리스
+
+버전 bump → `CHANGELOG.md` → 커밋 → `vX.Y.Z` 태그 → push 는 `scripts/release.sh`로 한다.
+
+```bash
+./scripts/release.sh           # 대화형 릴리스
+./scripts/release.sh --dry-run # 미리보기만 (파일/git 변경 없음)
+```
+
+자동으로 하는 것:
+
+- 마지막 태그 이후 커밋을 보고 버전 제안 (`feat` → minor, `fix` → patch, `!` / BREAKING → major)
+- 커밋 메시지로 CHANGELOG 섹션 생성 (Added / Changed / Fixed)
+- 커밋 메시지·태그명·날짜 기본값 (`chore: release vX.Y.Z`, `vX.Y.Z`)
+
+확인할 것:
+
+1. 미커밋 변경 포함 여부
+2. 제안된 버전 (Enter면 그대로)
+3. CHANGELOG (Enter=그대로 / `e`=에디터 / `m`=직접 입력)
+4. push 여부
+5. 최종 진행
+
+태그 형식은 기존과 같이 `v3.1.0` 이다.
 
 ## 함께 읽기
 
