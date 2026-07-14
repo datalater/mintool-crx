@@ -19,7 +19,7 @@ async function init() {
     card.className = 'card';
 
     for (const feat of items) {
-      const enabled = features[feat.key] !== false;
+      const enabled = resolveFeatureEnabled(features, feat.key);
       card.appendChild(createRow(feat, enabled));
     }
 
@@ -58,9 +58,19 @@ document.getElementById('btn-disable-all').addEventListener('click', () => setAl
 
 async function setAll(enabled) {
   const features = {};
-  for (const feat of FEATURE_DEFS) features[feat.key] = enabled;
+  for (const feat of FEATURE_DEFS) {
+    // Opt-in features stay off when enabling everything.
+    if (enabled && feat.defaultEnabled === false) {
+      features[feat.key] = false;
+      continue;
+    }
+    features[feat.key] = enabled;
+  }
   await chrome.storage.sync.set({ features });
-  document.querySelectorAll('input[data-key]').forEach(cb => { cb.checked = enabled; });
+  document.querySelectorAll('input[data-key]').forEach((cb) => {
+    const feat = FEATURE_DEFS.find((item) => item.key === cb.dataset.key);
+    cb.checked = resolveFeatureEnabled(features, feat.key);
+  });
 }
 
 init();

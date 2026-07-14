@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented in this file.
 
+## [3.1.0] - 2026-07-15
+
+### Added
+- CORS Bypass (opt-in, default OFF): injects `Access-Control-Allow-Origin: *` and related CORS response headers via `declarativeNetRequest`.
+- DevTools **MinTool** panel toggle for CORS Bypass, with orange `CORS` action badge when enabled.
+- Settings entry for CORS Bypass; "모두 켜기" does not enable opt-in features.
+
+### Changed
+- Feature guard supports `defaultEnabled: false` for opt-in features.
+
 ## [2.2.4] - 2026-02-22
 
 ### Added

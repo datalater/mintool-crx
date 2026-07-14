@@ -1,6 +1,7 @@
 importScripts(
   "services/bookmarklets/view-grid.global.js",
   "services/bookmarklets/registry.global.js",
+  "services/cors-bypass/rules.global.js",
 );
 
 const MENU_IDS = {
@@ -22,6 +23,10 @@ const VIRTUAL_FULLSCREEN_ACTIONS = {
 const VIRTUAL_FULLSCREEN_MENU_TITLE = "전체 화면을 창 내부로 제한하기 토글";
 
 chrome.runtime.onInstalled.addListener(() => {
+  syncCorsBypassFromStorage().catch((error) => {
+    console.warn("[background] cors bypass sync onInstalled failed", error);
+  });
+
   chrome.contextMenus.create({
     id: MENU_IDS.PARENT,
     title: "MinTool",
@@ -139,6 +144,25 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (bookmarklet) {
     await runBookmarklet(tab, bookmarklet, info.frameId);
   }
+});
+
+chrome.runtime.onStartup.addListener(() => {
+  syncCorsBypassFromStorage().catch((error) => {
+    console.warn("[background] cors bypass sync onStartup failed", error);
+  });
+});
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== "sync" || !changes.features) return;
+
+  const enabled = isCorsBypassEnabled(changes.features.newValue || {});
+  syncCorsBypassRules(enabled).catch((error) => {
+    console.warn("[background] cors bypass sync onChanged failed", error);
+  });
+});
+
+syncCorsBypassFromStorage().catch((error) => {
+  console.warn("[background] cors bypass sync on load failed", error);
 });
 
 chrome.runtime.onMessage.addListener((message, sender) => {

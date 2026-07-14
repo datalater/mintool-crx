@@ -1,4 +1,5 @@
-// Convention: features default to ENABLED. Disabled only when `features[key] === false`.
+// Convention: features default to ENABLED unless `defaultEnabled: false`.
+// Default ON: enabled when unset / `!== false`. Opt-in: enabled only when `=== true`.
 
 const FEATURE_DEFS = [
   { key: 'adBlock', label: 'Ad Block', description: '광고 차단', group: 'global' },
@@ -6,6 +7,13 @@ const FEATURE_DEFS = [
   { key: 'domCoverer', label: 'DOM 가리기', description: '우클릭한 요소를 같은 위치/크기의 오버레이로 덮어서 가리기', group: 'global' },
   { key: 'domStyleEditor', label: 'DOM 스타일 편집', description: '우클릭 메뉴로 요소 스타일 편집', group: 'global' },
   { key: 'virtualFullscreen', label: '창 내부 전체화면', description: '전체 화면을 창 내부로 제한하기', group: 'global' },
+  {
+    key: 'corsBypass',
+    label: 'CORS Bypass',
+    description: '응답에 Access-Control-Allow-Origin: * 추가 (개발용). DevTools MinTool 패널에서도 토글 가능',
+    group: 'global',
+    defaultEnabled: false,
+  },
   { key: 'githubAutoRefresh', label: '자동 새로고침', description: 'PR/알림 페이지 자동 새로고침', group: 'github' },
   { key: 'githubNotificationFilters', label: '알림 필터', description: '알림 페이지에 커스텀 필터 추가', group: 'github' },
   { key: 'githubCommentShortcut', label: '댓글 단축키', description: 'Issue/PR 댓글 편집 단축키', group: 'github' },
@@ -24,7 +32,17 @@ const FEATURE_GROUPS = [
 const _featureSettingsPromise = chrome.storage.sync.get('features')
   .then(r => r.features || {});
 
+function isFeatureDefaultEnabled(key) {
+  const def = FEATURE_DEFS.find((feature) => feature.key === key);
+  return def?.defaultEnabled !== false;
+}
+
+function resolveFeatureEnabled(features, key) {
+  if (isFeatureDefaultEnabled(key)) return features[key] !== false;
+  return features[key] === true;
+}
+
 async function isFeatureEnabled(key) {
   const features = await _featureSettingsPromise;
-  return features[key] !== false;
+  return resolveFeatureEnabled(features, key);
 }
