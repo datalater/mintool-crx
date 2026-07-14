@@ -163,4 +163,4 @@ var MINTOOL_BOOKMARKLETS = Object.freeze([
         else alert("There are no passwords in forms on this page.");
       },
     },
-  ]);
+  ].concat(MINTOOL_VIEW_GRID_BOOKMARKLETS));

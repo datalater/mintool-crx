@@ -1,4 +1,7 @@
-importScripts("services/bookmarklets/registry.global.js");
+importScripts(
+  "services/bookmarklets/view-grid.global.js",
+  "services/bookmarklets/registry.global.js",
+);
 
 const MENU_IDS = {
   PARENT: "mintool-parent",
@@ -240,6 +243,7 @@ async function runBookmarklet(tab, bookmarklet, frameId) {
       target,
       files: [
         "utils/content-isolated/popup.global.js",
+        "services/bookmarklets/view-grid.global.js",
         "services/bookmarklets/registry.global.js",
       ],
     });

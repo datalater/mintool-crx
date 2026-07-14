@@ -14,12 +14,13 @@ function readText(relativePath) {
 }
 
 function loadBookmarklets() {
+  const viewGridSource = readText("services/bookmarklets/view-grid.global.js");
   const source = readText("services/bookmarklets/registry.global.js");
   const context = {};
 
   vm.createContext(context);
   vm.runInContext(
-    `${source}\nthis.MINTOOL_BOOKMARKLETS = MINTOOL_BOOKMARKLETS;`,
+    `${viewGridSource}\n${source}\nthis.MINTOOL_BOOKMARKLETS = MINTOOL_BOOKMARKLETS;`,
     context,
   );
 
@@ -40,27 +41,46 @@ function testBackgroundLoadsAndWiresBookmarklets() {
 
   assert.match(
     background,
-    /importScripts\("services\/bookmarklets\/registry\.global\.js"\)/,
+    /services\/bookmarklets\/view-grid\.global\.js/,
+  );
+  assert.match(
+    background,
+    /services\/bookmarklets\/registry\.global\.js/,
   );
   assert.match(background, /BOOKMARKLETS_PARENT/);
   assert.match(background, /북마클릿/);
   assert.match(background, /chrome\.scripting\.executeScript/);
   assert.match(
     background,
-    /files:\s*\[\s*"utils\/content-isolated\/popup\.global\.js",\s*"services\/bookmarklets\/registry\.global\.js",\s*\]/,
+    /files:\s*\[\s*"utils\/content-isolated\/popup\.global\.js",\s*"services\/bookmarklets\/view-grid\.global\.js",\s*"services\/bookmarklets\/registry\.global\.js",\s*\]/,
   );
   assert.match(background, /args:\s*\[bookmarklet\.id\]/);
 }
 
 function testRegistryExposesBookmarklets() {
   const source = readText("services/bookmarklets/registry.global.js");
+  const viewGridSource = readText("services/bookmarklets/view-grid.global.js");
   const bookmarklets = loadBookmarklets();
   const ids = bookmarklets.map((bookmarklet) => bookmarklet.id);
 
   assert.match(source, /var\s+MINTOOL_BOOKMARKLETS\s*=/);
+  assert.match(source, /MINTOOL_VIEW_GRID_BOOKMARKLETS/);
+  assert.match(viewGridSource, /var\s+MINTOOL_VIEW_GRID_BOOKMARKLETS\s*=/);
   assert.ok(ids.includes("outline"));
   assert.ok(ids.includes("outline-clear"));
+  assert.ok(ids.includes("view-grid"));
+  assert.ok(ids.includes("view-grid-clear"));
   assert.equal(new Set(ids).size, ids.length, "bookmarklet IDs should be unique");
+  assert.match(
+    viewGridSource,
+    /pointer-events:\s*none/,
+    "view-grid should not block page interaction",
+  );
+  assert.match(
+    viewGridSource,
+    /data-mintool-view-grid-panel/,
+    "view-grid should expose a floating control panel",
+  );
   assert.ok(
     bookmarklets.every((bookmarklet) => typeof bookmarklet.title === "string"),
   );
