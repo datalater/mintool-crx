@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## [3.3.0] - 2026-07-30
+
+### Added
+- Elements sidebar **Attributes** panel for `$0`: attribute table with name/value filter, long-value collapse/expand, per-row copy, and JSON copy-all.
+- iframe selection support via `frameURL` walk (`webNavigation` + DOM iframe URLs).
+
 ## [3.2.0] - 2026-07-15
 
 ### Added

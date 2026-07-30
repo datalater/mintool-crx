@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Attributes</title>
+    <link rel="stylesheet" href="attributes-sidebar.css" />
+  </head>
+  <body>
+    <header class="toolbar">
+      <div class="toolbar-main">
+        <div class="element-meta">
+          <span id="element-label" class="element-label">요소를 선택하세요</span>
+          <span id="attr-count" class="attr-count" hidden></span>
+        </div>
+        <div class="toolbar-actions">
+          <button id="copy-all-btn" type="button" class="btn" disabled>
+            복사 (JSON)
+          </button>
+          <button id="refresh-btn" type="button" class="btn" title="새로고침">
+            🔄
+          </button>
+        </div>
+      </div>
+      <div id="frame-hint" class="frame-hint" hidden></div>
+      <div class="filter-row">
+        <input
+          id="filter-input"
+          class="filter-input"
+          type="search"
+          placeholder="name / value 필터"
+          spellcheck="false"
+          autocomplete="off"
+        />
+      </div>
+    </header>
+
+    <p id="empty-state" class="empty">Elements에서 요소를 선택하면 attributes가 표시됩니다.</p>
+    <p id="filter-empty" class="empty" hidden>필터와 일치하는 attribute가 없습니다.</p>
+
+    <div id="table-wrap" class="table-wrap" hidden>
+      <table class="attr-table">
+        <thead>
+          <tr>
+            <th class="col-name">Name</th>
+            <th class="col-value">Value</th>
+            <th class="col-actions"></th>
+          </tr>
+        </thead>
+        <tbody id="attr-tbody"></tbody>
+      </table>
+    </div>
+
+    <script src="attributes-sidebar.js"></script>
+  </body>
+</html>
