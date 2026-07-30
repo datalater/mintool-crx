@@ -4,9 +4,11 @@ const colors = {
   green: "#4CAF50",
 };
 
+const VERSION = chrome.runtime.getManifest().version;
+
 function log(msg) {
   console.log(
-    `%c[MINTOOL] ${JSON.stringify(msg, null, 2)}`,
+    `%c[MINTOOL v${VERSION}] ${JSON.stringify(msg, null, 2)}`,
     `color: ${colors.green}`
   );
 }

@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "default_locale": "en",
   "name": "MinTool",
-  "version": "3.3.0",
+  "version": "3.3.1",
   "author": "Min <the7mincheol@gmail.com>",
   "description": "Toolbox for anything",
   "icons": {
@@ -20,7 +20,9 @@
     "storage",
     "webNavigation"
   ],
-  "host_permissions": ["<all_urls>"],
+  "host_permissions": [
+    "<all_urls>"
+  ],
   "background": {
     "service_worker": "background.js"
   },
@@ -48,13 +50,19 @@
         "services/console-toast/content-main.js",
         "utils/vendor/toastify.js"
       ],
-      "matches": ["<all_urls>"],
+      "matches": [
+        "<all_urls>"
+      ],
       "world": "MAIN",
       "run_at": "document_start"
     },
     {
-      "js": ["services/console-toast/content-isolated.js"],
-      "matches": ["<all_urls>"],
+      "js": [
+        "services/console-toast/content-isolated.js"
+      ],
+      "matches": [
+        "<all_urls>"
+      ],
       "run_at": "document_start"
     },
     {
@@ -73,11 +81,17 @@
         "services/dom-tools/content-isolated/coverer.js",
         "utils/vendor/vue-min.js"
       ],
-      "matches": ["<all_urls>"]
+      "matches": [
+        "<all_urls>"
+      ]
     },
     {
-      "js": ["utils/content-isolated/iframe-contextmenu-reporter.global.js"],
-      "matches": ["<all_urls>"],
+      "js": [
+        "utils/content-isolated/iframe-contextmenu-reporter.global.js"
+      ],
+      "matches": [
+        "<all_urls>"
+      ],
       "all_frames": true
     },
     {
@@ -89,23 +103,42 @@
         "services/github/content-isolated/shortcut.js",
         "services/github/content-isolated/pr-commit-auto-embed.js"
       ],
-      "matches": ["<all_urls>"]
+      "matches": [
+        "<all_urls>"
+      ]
     },
     {
-      "js": ["services/ad-block/content-isolated.js"],
-      "matches": ["<all_urls>"]
+      "js": [
+        "services/ad-block/content-isolated.js"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
     },
     {
-      "js": ["services/github/content-isolated/site.js"],
-      "matches": ["https://github.com/*"]
+      "js": [
+        "services/github/content-isolated/site.js"
+      ],
+      "matches": [
+        "https://github.com/*"
+      ]
     },
     {
-      "js": ["services/toss-invest/content-isolated.js"],
-      "matches": ["https://tossinvest.com/*"]
+      "js": [
+        "services/toss-invest/content-isolated.js"
+      ],
+      "matches": [
+        "https://tossinvest.com/*"
+      ]
     },
     {
-      "js": ["services/jira/content-isolated.js"],
-      "matches": ["https://*.atlassian.net/*", "https://atlassian.net/*"]
+      "js": [
+        "services/jira/content-isolated.js"
+      ],
+      "matches": [
+        "https://*.atlassian.net/*",
+        "https://atlassian.net/*"
+      ]
     }
   ]
 }

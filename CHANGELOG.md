@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## [3.3.1] - 2026-07-30
+
+### Changed
+- Content script log prefix includes extension version from the manifest (`[MINTOOL vX.Y.Z]`).
+
+
 ## [3.3.0] - 2026-07-30
 
 ### Added
