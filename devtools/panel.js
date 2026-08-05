@@ -5,12 +5,6 @@ const FEATURES = [
     statusId: "cors-status",
     onText: "켜짐 — 전역 CORS 헤더 주입 중",
   },
-  {
-    key: "consoleToast",
-    toggleId: "console-toast-toggle",
-    statusId: "console-toast-status",
-    onText: "켜짐 — 페이지에 콘솔 토스트 표시",
-  },
 ];
 
 function renderFeature(feature, enabled) {

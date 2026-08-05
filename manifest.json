@@ -43,26 +43,12 @@
     {
       "js": [
         "utils/content-main/navigation.global.js",
-        "services/virtual-fullscreen/content-main.js",
-        "services/console-toast/store.js",
-        "services/console-toast/styles.js",
-        "services/console-toast/ui.js",
-        "services/console-toast/content-main.js",
-        "utils/vendor/toastify.js"
+        "services/virtual-fullscreen/content-main.js"
       ],
       "matches": [
         "<all_urls>"
       ],
       "world": "MAIN",
-      "run_at": "document_start"
-    },
-    {
-      "js": [
-        "services/console-toast/content-isolated.js"
-      ],
-      "matches": [
-        "<all_urls>"
-      ],
       "run_at": "document_start"
     },
     {
