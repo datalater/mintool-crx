@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "default_locale": "en",
   "name": "MinTool",
-  "version": "3.3.1",
+  "version": "3.4.0",
   "author": "Min <the7mincheol@gmail.com>",
   "description": "Toolbox for anything",
   "icons": {

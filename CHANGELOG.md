@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented in this file.
 
+## [3.4.0] - 2026-08-05
+
+### Added
+- DevTools **Networker** panel (Step 1): list requests from `chrome.devtools.network` (`getHAR` / `onRequestFinished`) with filter and summary copy.
+
+### Removed
+- **Console Toast** feature (content scripts, MinTool panel toggle, feature-guard entry, and related tests).
+
+### Fixed
+- Attributes sidebar iframe selection: evaluate child frames via `frameURL` before top frame to avoid stale `$0`, and collect absolute iframe URLs more reliably.
+
+### Changed
+- Split Attributes sidebar frame helpers into `devtools/attributes-frames.js`.
+
 ## [3.3.1] - 2026-07-30
 
 ### Changed
