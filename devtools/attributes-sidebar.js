@@ -1,51 +1,3 @@
-const READ_ATTRIBUTES_EXPR = `(function () {
-  const el = $0;
-  if (!el || el.nodeType !== 1 || !el.attributes) return null;
-  if (el.ownerDocument !== document) return null;
-  const attributes = [];
-  for (let i = 0; i < el.attributes.length; i++) {
-    const attr = el.attributes[i];
-    attributes.push({ name: attr.name, value: attr.value });
-  }
-  return {
-    tagName: el.tagName.toLowerCase(),
-    id: el.id || "",
-    className: typeof el.className === "string" ? el.className : "",
-    frameUrl: location.href,
-    attributes,
-  };
-})()`;
-
-const COLLECT_FRAME_URLS_EXPR = `(function () {
-  const urls = [];
-  const seen = Object.create(null);
-  const add = (url) => {
-    if (!url || seen[url]) return;
-    seen[url] = true;
-    urls.push(url);
-  };
-  const visit = (doc) => {
-    const frames = doc.querySelectorAll("iframe, frame");
-    for (let i = 0; i < frames.length; i++) {
-      const frame = frames[i];
-      const src = frame.getAttribute("src") || frame.src || "";
-      try {
-        const childDoc = frame.contentDocument;
-        if (childDoc) {
-          add(childDoc.URL || childDoc.location.href);
-          visit(childDoc);
-        } else {
-          add(src);
-        }
-      } catch (error) {
-        add(src);
-      }
-    }
-  };
-  visit(document);
-  return urls;
-})()`;
-
 const elements = {
   label: document.getElementById("element-label"),
   count: document.getElementById("attr-count"),
@@ -274,91 +226,18 @@ function renderAttributes(info, isIframe) {
   renderTableRows();
 }
 
-function evalAsync(expression, options) {
-  return new Promise((resolve) => {
-    const finish = (result, exceptionInfo) => {
-      if (exceptionInfo) {
-        resolve({ ok: false, error: exceptionInfo });
-        return;
-      }
-      resolve({ ok: true, result });
-    };
-
-    if (options) {
-      chrome.devtools.inspectedWindow.eval(expression, options, finish);
-      return;
-    }
-    chrome.devtools.inspectedWindow.eval(expression, finish);
-  });
-}
-
-async function listNavigationFrameUrls() {
-  const tabId = chrome.devtools.inspectedWindow.tabId;
-  try {
-    const frames = await chrome.webNavigation.getAllFrames({ tabId });
-    if (!frames) return [];
-    return frames
-      .filter((frame) => frame.frameId !== 0 && frame.url)
-      .map((frame) => frame.url);
-  } catch (error) {
-    console.warn("[attributes-sidebar] getAllFrames failed", error);
-    return [];
-  }
-}
-
-async function listDomFrameUrls() {
-  const { ok, result } = await evalAsync(COLLECT_FRAME_URLS_EXPR);
-  if (!ok || !Array.isArray(result)) return [];
-  return result.filter(Boolean);
-}
-
-function uniqueUrls(urls) {
-  const seen = new Set();
-  const unique = [];
-  for (const url of urls) {
-    if (!url || seen.has(url)) continue;
-    seen.add(url);
-    unique.push(url);
-  }
-  return unique;
-}
-
-async function listChildFrameUrls() {
-  const [navUrls, domUrls] = await Promise.all([
-    listNavigationFrameUrls(),
-    listDomFrameUrls(),
-  ]);
-  return uniqueUrls([...navUrls, ...domUrls]);
-}
-
-async function readAttributesInFrame(frameURL) {
-  const options = frameURL ? { frameURL } : undefined;
-  const { ok, result } = await evalAsync(READ_ATTRIBUTES_EXPR, options);
-  if (!ok || !result) return null;
-  return result;
-}
-
-async function readSelectedAttributes() {
-  const topResult = await readAttributesInFrame(null);
-  if (topResult) {
-    return { info: topResult, isIframe: false };
-  }
-
-  const frameUrls = await listChildFrameUrls();
-  for (const frameURL of frameUrls) {
-    const info = await readAttributesInFrame(frameURL);
-    if (info) return { info, isIframe: true };
-  }
-  return null;
-}
-
 async function refreshAttributes() {
   const generation = ++refreshGeneration;
   const selected = await readSelectedAttributes();
   if (generation !== refreshGeneration) return;
 
-  if (!selected) {
-    showEmpty("Elements에서 요소를 선택하면 attributes가 표시됩니다.");
+  if (!selected?.info) {
+    const suffix = selected?.frameCount
+      ? ` (iframe ${selected.frameCount}개 탐색됨)`
+      : "";
+    showEmpty(
+      `Elements에서 요소를 선택하면 attributes가 표시됩니다.${suffix}`,
+    );
     return;
   }
   renderAttributes(selected.info, selected.isIframe);

@@ -17,16 +17,20 @@ function testDevtoolsRegistersAttributesSidebar() {
 function testAttributesSidebarUiSurface() {
   const html = readText("devtools/attributes-sidebar.html");
   const js = readText("devtools/attributes-sidebar.js");
+  const frames = readText("devtools/attributes-frames.js");
 
   assert.match(html, /id="attr-tbody"/);
   assert.match(html, /복사 \(JSON\)/);
-  assert.match(js, /\$0/);
+  assert.match(html, /attributes-frames\.js/);
+  assert.match(frames, /\$0/);
+  assert.match(frames, /ownerDocument !== document/);
+  assert.match(frames, /frameURL/);
+  assert.match(frames, /webNavigation\.getAllFrames/);
+  assert.match(frames, /expandFrameUrlCandidates/);
+  assert.match(frames, /child frame을 먼저/);
   assert.match(js, /onSelectionChanged/);
   assert.match(js, /navigator\.clipboard\.writeText/);
   assert.match(js, /JSON\.stringify/);
-  assert.match(js, /ownerDocument !== document/);
-  assert.match(js, /frameURL/);
-  assert.match(js, /webNavigation\.getAllFrames/);
   assert.match(html, /id="filter-input"/);
   assert.match(js, /matchesFilter/);
   assert.match(js, /filterQuery/);
