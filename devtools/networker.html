@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Networker</title>
+    <link rel="stylesheet" href="networker.css" />
+  </head>
+  <body>
+    <header class="toolbar">
+      <div class="toolbar-main">
+        <div class="title-meta">
+          <span class="panel-title">Networker · Step 1</span>
+          <span id="list-count" class="list-count" hidden></span>
+        </div>
+        <div class="toolbar-actions">
+          <label class="auto-label" title="완료된 요청을 자동으로 추가">
+            <input id="auto-toggle" type="checkbox" checked />
+            자동 수집
+          </label>
+          <button id="clear-btn" type="button" class="btn">비우기</button>
+          <button id="refresh-btn" type="button" class="btn" title="getHAR로 다시 읽기">
+            🔄
+          </button>
+        </div>
+      </div>
+      <div class="filter-row">
+        <input
+          id="filter-input"
+          class="filter-input"
+          type="search"
+          placeholder="method / url / status 필터"
+          spellcheck="false"
+          autocomplete="off"
+        />
+      </div>
+      <p class="step-hint">
+        Step 1: Network 탭과 같은 요청 목록이 보이는지만 확인합니다. (body 파싱 없음)
+      </p>
+    </header>
+
+    <div class="layout">
+      <aside class="list-pane">
+        <p id="list-empty" class="empty">
+          요청이 없습니다. DevTools를 연 상태로 페이지를 새로고침하세요.
+        </p>
+        <p id="filter-empty" class="empty" hidden>필터와 일치하는 요청이 없습니다.</p>
+        <ul id="request-list" class="request-list" hidden></ul>
+      </aside>
+
+      <section class="detail-pane">
+        <p id="detail-empty" class="empty">왼쪽에서 요청을 선택하세요.</p>
+        <div id="detail-wrap" class="detail-wrap" hidden>
+          <div class="detail-header">
+            <div class="detail-meta">
+              <span id="detail-method" class="method"></span>
+              <span id="detail-status" class="status"></span>
+              <span id="detail-url" class="detail-url"></span>
+            </div>
+            <div class="detail-actions">
+              <button id="copy-url-btn" type="button" class="btn">URL 복사</button>
+              <button id="copy-json-btn" type="button" class="btn">요약 JSON 복사</button>
+            </div>
+          </div>
+          <pre id="detail-summary" class="line-body"></pre>
+        </div>
+      </section>
+    </div>
+
+    <script src="networker.js"></script>
+  </body>
+</html>
