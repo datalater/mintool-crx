@@ -9,6 +9,8 @@ mintoolDomHider.config = Object.freeze({
   revealAttribute: "data-mintool-hide-revealed",
   markersHostId: "mintool-hide-markers",
   markerSize: 28,
+  panelWidth: 320,
+  previewOpacity: 0.45,
   viewportMargin: 8,
   tooltipGap: 6,
   messageType: "mintool:dom-hide-rules",

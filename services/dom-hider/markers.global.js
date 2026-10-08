@@ -4,8 +4,8 @@
     const config = api.config;
     const entries = new Map();
     const mutations = new MutationObserver((records) => {
-      if (records.some((record) => record.attributeName !== config.revealAttribute && !internal(record.target) &&
-          !(record.type === "childList" && [...record.addedNodes, ...record.removedNodes].every(internal)))) schedule(true);
+      if (records.some((record) => record.attributeName !== config.revealAttribute && !api.isOwnNode(record.target) &&
+          !(record.type === "childList" && [...record.addedNodes, ...record.removedNodes].every(api.isOwnNode)))) schedule(true);
     });
     const sizes = new ResizeObserver(() => schedule(false));
     const intersections = new IntersectionObserver((changes) => {
@@ -83,15 +83,8 @@
     }
 
     function syncTargets() {
-      const matches = new Map();
-      for (const rule of rules) {
-        for (const element of api.resolveSelector(rule.selector) || []) if (!matches.has(element)) matches.set(element, rule);
-      }
-      // One dot per outer hidden region. Nested matching rules must not leave orphan inner dots.
-      const outer = new Map([...matches].filter(([element]) => {
-        for (let parent = element.parentElement; parent; parent = parent.parentElement) if (matches.has(parent)) return false;
-        return true;
-      }));
+      // Dots and preview veils share the same outer-region selection policy.
+      const outer = api.outermostRuleTargets(rules);
       for (const [element, entry] of entries) if (!outer.has(element)) { removeEntry(element, entry); entries.delete(element); }
       for (const [element, rule] of outer) {
         if (!entries.has(element)) addEntry(element);
@@ -178,11 +171,6 @@
     function removeEntry(element, entry) {
       if (active === entry) hideTooltip();
       entry.events.abort(); sizes.unobserve(element); intersections.unobserve(element); entry.button.remove(); restoreAttribute(entry);
-    }
-
-    function internal(node) {
-      const element = node instanceof Element ? node : node.parentElement;
-      return !!element?.closest(`[${config.uiAttribute}], style[${config.sheetAttribute}]`);
     }
 
     function stop() {

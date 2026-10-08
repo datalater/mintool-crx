@@ -71,6 +71,7 @@
         "services/dom-hider/engine.global.js",
         "services/dom-hider/markers.global.js",
         "services/dom-hider/picker-ui.global.js",
+        "services/dom-hider/preview.global.js",
         "services/dom-hider/picker.global.js",
         "services/dom-hider/content-isolated.js",
         "utils/vendor/vue-min.js"

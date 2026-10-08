@@ -48,10 +48,10 @@
     return [...untouched, ...edited.map(({ id, origin, page, selector, enabled }) => ({ id, origin, page, selector, enabled }))];
   };
 
-  api.visibilityCss = (selectors, { allowReveal = true } = {}) => selectors.map((selector) => {
+  api.visibilityCss = (selectors) => selectors.map((selector) => {
     // Removing our rule, rather than forcing visibility:visible, preserves site-owned hidden children.
     const shown = `[${api.config.revealAttribute}]`;
-    const exception = allowReveal ? `:not(:is(${shown}, ${shown} *))` : "";
+    const exception = `:not(:is(${shown}, ${shown} *))`;
     const target = `:is(${selector}):not(:is(${api.config.protectedSelector}, [${api.config.uiAttribute}]))${exception}`;
     return `${target}, ${target} *${exception} { visibility: hidden !important; }`;
   }).join("\n");

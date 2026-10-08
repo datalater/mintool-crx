@@ -15,6 +15,22 @@
     }
   };
 
+  api.outermostRuleTargets = (rules) => {
+    const matches = new Map();
+    for (const rule of rules) {
+      for (const element of api.resolveSelector(rule.selector) || []) if (!matches.has(element)) matches.set(element, rule);
+    }
+    return new Map([...matches].filter(([element]) => {
+      for (let parent = element.parentElement; parent; parent = parent.parentElement) if (matches.has(parent)) return false;
+      return true;
+    }));
+  };
+
+  api.isOwnNode = (node) => {
+    const element = node instanceof Element ? node : node.parentElement;
+    return !!element?.closest(`[${config.uiAttribute}], style[${config.sheetAttribute}]`);
+  };
+
   api.selectionOptions = (target) => {
     if (!api.selectable(target)) return [];
     const single = uniqueSelector(target);
