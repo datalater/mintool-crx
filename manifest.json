@@ -65,6 +65,13 @@
         "services/dom-tools/content-isolated/style-editor.js",
         "services/dom-tools/content-isolated/eraser.js",
         "services/dom-tools/content-isolated/coverer.js",
+        "configs/dom-hider.global.js",
+        "services/dom-hider/rules.global.js",
+        "services/dom-hider/selector.global.js",
+        "services/dom-hider/engine.global.js",
+        "services/dom-hider/picker-ui.global.js",
+        "services/dom-hider/picker.global.js",
+        "services/dom-hider/content-isolated.js",
         "utils/vendor/vue-min.js"
       ],
       "matches": [

@@ -1,0 +1,20 @@
+globalThis.mintoolDomHider = globalThis.mintoolDomHider || {};
+mintoolDomHider.config = Object.freeze({
+  storageKey: "domHideRulesV1",
+  featureKey: "domHideRules",
+  menuId: "mintool-hide-mode",
+  hostId: "mintool-hide-mode",
+  sheetAttribute: "data-mintool-hide-sheet",
+  messageType: "mintool:dom-hide-rules",
+  startAction: "mintool:start-hide-mode",
+  operations: Object.freeze({ list: "list", add: "add", remove: "remove", toggle: "toggle", disableSite: "disable-site" }),
+  navigationAction: "mintool:hide-rules-navigation",
+  maxRules: 200,
+  maxSelectorLength: 2000,
+  maxSuggestions: 8,
+  maxAttributeLength: 120,
+  pathDepth: 20,
+  panelZIndex: 2147483647,
+  protectedSelector: "html, body, head, main, article, script, style, link, meta, title, noscript, template",
+  groupAttributes: ["data-ad-slot", "data-ad-unit", "data-ad-client", "data-ad-type", "data-sponsored"],
+});

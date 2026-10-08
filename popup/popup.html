@@ -25,6 +25,16 @@
         <div class="column shortcut-col"></div>
       </div>
     </div>
+    <section id="hide-rules" aria-label="DOM 숨김 규칙">
+      <h2>DOM 숨김 규칙</h2>
+      <button id="start-hide-mode" disabled>숨기기 모드 시작</button>
+      <button id="disable-site-hiding" disabled>이 사이트 전체 해제</button>
+      <p id="hide-rules-status" role="status"></p>
+      <ul id="hide-rules-list"></ul>
+    </section>
+    <script src="../configs/dom-hider.global.js"></script>
+    <script src="../services/dom-hider/rules.global.js"></script>
+    <script src="dom-hide-rules.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>

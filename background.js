@@ -2,6 +2,9 @@ importScripts(
   "services/bookmarklets/view-grid.global.js",
   "services/bookmarklets/registry.global.js",
   "services/cors-bypass/rules.global.js",
+  "configs/dom-hider.global.js",
+  "services/dom-hider/rules.global.js",
+  "services/dom-hider/storage.background.js",
 );
 
 const MENU_IDS = {
@@ -71,6 +74,14 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 
   chrome.contextMenus.create({
+    id: mintoolDomHider.config.menuId,
+    parentId: MENU_IDS.PARENT,
+    title: "숨기기 모드 (선택·저장)",
+    contexts: ["all"],
+    documentUrlPatterns: ["http://*/*", "https://*/*"],
+  });
+
+  chrome.contextMenus.create({
     id: MENU_IDS.EDIT_STYLE,
     parentId: MENU_IDS.PARENT,
     title: "DOM 스타일 편집하기",
@@ -104,6 +115,16 @@ const MENU_FEATURE_MAP = {
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (!tab?.id) return;
+
+  if (info.menuItemId === mintoolDomHider.config.menuId) {
+    try {
+      const result = await chrome.tabs.sendMessage(tab.id, { action: mintoolDomHider.config.startAction }, { frameId: 0 });
+      if (!result?.ok) console.warn("[MinTool] 숨기기 모드", result?.error);
+    } catch (error) {
+      console.warn("[MinTool] 페이지 새로고침 후 숨기기 모드를 다시 실행하세요.", error);
+    }
+    return;
+  }
 
   const featureKey = MENU_FEATURE_MAP[info.menuItemId];
   if (featureKey) {

@@ -4,6 +4,7 @@
 const FEATURE_DEFS = [
   { key: 'adBlock', label: 'Ad Block', description: '광고 차단', group: 'global' },
   { key: 'domEraser', label: 'DOM 제거/숨기기', description: '우클릭 메뉴로 DOM 요소 제거 또는 숨기기', group: 'global' },
+  { key: 'domHideRules', label: 'DOM 숨김 규칙', description: '미리보기로 선택한 영역을 공간 유지 방식으로 숨기고 재적용', group: 'global' },
   { key: 'domCoverer', label: 'DOM 가리기', description: '우클릭한 요소를 같은 위치/크기의 오버레이로 덮어서 가리기', group: 'global' },
   { key: 'domStyleEditor', label: 'DOM 스타일 편집', description: '우클릭 메뉴로 요소 스타일 편집', group: 'global' },
   { key: 'virtualFullscreen', label: '창 내부 전체화면', description: '전체 화면을 창 내부로 제한하기', group: 'global' },

@@ -68,6 +68,15 @@ body {
   min-width: 40px;
 }
 
+#hide-rules { border-top: 1px solid #ddd; margin: 8px; padding-top: 8px; max-height: 380px; overflow: auto; }
+#hide-rules h2 { font-size: 13px; }
+#hide-rules button { font: inherit; cursor: pointer; margin: 3px; padding: 5px; }
+#hide-rules button:disabled { cursor: default; }
+#hide-rules-list { list-style: none; padding: 0; }
+#hide-rules-list li { border-top: 1px solid #ddd; padding: 6px 0; }
+#hide-rules code, #hide-rules small { display: block; overflow-wrap: anywhere; white-space: normal; }
+#hide-rules-status { overflow-wrap: anywhere; color: #555; }
+
 .separator {
   border-top: 1px solid #dddddd;
   height: 0px;
