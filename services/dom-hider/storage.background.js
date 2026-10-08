@@ -42,6 +42,9 @@
         if (rules.length > config.maxRules) throw new Error(`규칙은 최대 ${config.maxRules}개까지 저장할 수 있습니다.`);
         break;
       }
+      case config.operations.saveEditor:
+        rules = api.mergeEditorRules(rules, { url: url.href, expected: message.expected, edited: message.rules });
+        break;
       case config.operations.remove:
         rules = rules.filter((rule) => !(rule.origin === url.origin && rule.id === message.id));
         break;

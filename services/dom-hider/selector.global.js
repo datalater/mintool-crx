@@ -3,7 +3,7 @@
   const config = api.config;
   api.selectable = (element) => element instanceof HTMLElement && element.isConnected &&
     element.getRootNode() === document && !element.matches(config.protectedSelector) &&
-    !element.closest(`#${config.hostId}`) && !element.contains(document.getElementById(config.hostId));
+    !element.closest(`[${config.uiAttribute}]`) && !element.querySelector(`[${config.uiAttribute}]`);
 
   api.resolveSelector = (selector) => {
     if (typeof selector !== "string" || selector.length > config.maxSelectorLength) return null;

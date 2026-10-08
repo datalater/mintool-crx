@@ -83,6 +83,47 @@ test("failed storage writes return an error, leave data unchanged, and do not po
   assert.equal((await send(add(".ad"))).ok, true);
 });
 
+test("editor loads disabled/current rules and saves edits/deletions without touching other pages", async () => {
+  const { send, api } = setup();
+  await send(add(".page"));
+  await send(add(".site", "site"));
+  const popup = { id: "mintool-test", url: "chrome-extension://mintool-test/popup/popup.html" };
+  await send({ ...add(".other-page"), url: "https://example.test/b" }, popup);
+  const all = (await send({ operation: "list" })).rules;
+  await send({ operation: "toggle", id: all.find((rule) => rule.selector === ".page").id });
+  const expected = Array.from(api.contextRules((await send({ operation: "list" })).rules, "https://example.test/a"));
+  assert.equal(expected.length, 2);
+  assert.equal(expected.find((rule) => rule.selector === ".page").enabled, false);
+  const edited = [{ ...expected.find((rule) => rule.selector === ".page"), selector: ".changed", enabled: true }];
+  const result = await send({ operation: "save-editor", expected, rules: edited });
+  assert.equal(result.ok, true);
+  assert.deepEqual(Array.from(result.rules, (rule) => rule.selector).sort(), [".changed", ".other-page"]);
+  assert.equal((await send({ operation: "save-editor", expected: edited, rules: [] })).ok, true);
+  assert.equal((await send({ operation: "list" })).rules[0].selector, ".other-page");
+});
+
+test("stale editor saves are rejected instead of overwriting concurrent popup changes", async () => {
+  const { send } = setup();
+  await send(add(".ad"));
+  const expected = (await send({ operation: "list" })).rules;
+  await send({ operation: "toggle", id: expected[0].id });
+  const result = await send({ operation: "save-editor", expected, rules: [] });
+  assert.equal(result.ok, false);
+  const actual = (await send({ operation: "list" })).rules;
+  assert.equal(actual.length, 1);
+  assert.equal(actual[0].enabled, false);
+});
+
+test("editor refuses rules outside its page context or duplicate selectors", async () => {
+  const { send } = setup();
+  await send(add(".ad"));
+  const expected = (await send({ operation: "list" })).rules;
+  for (const edited of [[{ ...expected[0], page: "/elsewhere" }], [...expected, { ...expected[0], id: "new-id" }]]) {
+    assert.equal((await send({ operation: "save-editor", expected, rules: edited })).ok, false);
+  }
+  assert.equal((await send({ operation: "list" })).rules.length, 1);
+});
+
 test("invalid scope, oversized rule and content-script cross-origin writes are rejected", async () => {
   const { send, api } = setup();
   for (const message of [add(".ad", "everywhere"), add("a".repeat(api.config.maxSelectorLength + 1)), { ...add(".ad"), url: "https://other.test/" }]) {

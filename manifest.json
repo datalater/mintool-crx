@@ -69,6 +69,7 @@
         "services/dom-hider/rules.global.js",
         "services/dom-hider/selector.global.js",
         "services/dom-hider/engine.global.js",
+        "services/dom-hider/markers.global.js",
         "services/dom-hider/picker-ui.global.js",
         "services/dom-hider/picker.global.js",
         "services/dom-hider/content-isolated.js",
