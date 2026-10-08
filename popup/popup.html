@@ -24,14 +24,25 @@
         <div class="column title-col">설정</div>
         <div class="column shortcut-col"></div>
       </div>
+      <div class="separator"></div>
+      <section id="hide-rules" aria-label="DOM 숨김 규칙">
+        <div class="menu-row">
+          <button type="button" class="menu-item menu-button" id="start-hide-mode" aria-describedby="hide-rules-state" disabled>
+            <span class="column icon-col"><span id="hide-state-dot" class="state-dot" data-active="false" aria-hidden="true"></span></span>
+            <span class="column title-col">숨기기 패널 열기</span>
+          </button>
+          <button type="button" class="menu-item menu-button menu-more" id="hide-rules-toggle" aria-label="숨김 규칙 추가 작업" aria-expanded="false" aria-controls="hide-rules-more" title="추가 작업" disabled>⋯</button>
+        </div>
+        <div id="hide-rules-more" hidden>
+          <button type="button" class="menu-item menu-button" id="disable-site-hiding" title="다른 페이지 전용 규칙까지 모두 끕니다. 저장된 규칙은 삭제하지 않습니다." disabled>
+            <span class="column icon-col" aria-hidden="true"></span>
+            <span class="column title-col">이 사이트 전체 해제</span>
+          </button>
+        </div>
+        <span id="hide-rules-state" class="sr-only" role="status">상태 확인 중</span>
+        <p id="hide-rules-status" class="menu-message" role="status" hidden></p>
+      </section>
     </div>
-    <section id="hide-rules" aria-label="DOM 숨김 규칙">
-      <h2>DOM 숨김 규칙</h2>
-      <button id="start-hide-mode" disabled>숨기기 모드 시작</button>
-      <button id="disable-site-hiding" disabled>이 사이트 전체 해제</button>
-      <p id="hide-rules-status" role="status"></p>
-      <ul id="hide-rules-list"></ul>
-    </section>
     <script src="../configs/dom-hider.global.js"></script>
     <script src="../services/dom-hider/rules.global.js"></script>
     <script src="dom-hide-rules.js"></script>
