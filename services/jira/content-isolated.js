@@ -15,6 +15,8 @@ const COPY_SUCCESS_TOAST_DISPLAY_DURATION_MS = 2000;
 
 let activeJiraTicketLinkElement = null;
 let hideCopyControlsTimeoutId = null;
+let jiraCopyTextButtonElement = null;
+let jiraCopyIdButtonElement = null;
 const jiraCopyControlsElement = createCopyControlsElement();
 const jiraCopySuccessToastElement = createCopySuccessToastElement();
 let hideCopySuccessToastTimeoutId = null;
@@ -31,6 +33,7 @@ function handleDocumentMouseMove(mouseEvent) {
   if (hoveredJiraTicketLinkElement) {
     clearScheduledHideCopyControlsElement();
     activeJiraTicketLinkElement = hoveredJiraTicketLinkElement;
+    updateCopyButtonPreviews();
     positionCopyControlsElement(activeJiraTicketLinkElement);
     showCopyControlsElement();
     return;
@@ -58,8 +61,9 @@ function createCopyControlsElement() {
   copyControlsElement.id = COPY_CONTROLS_ID;
   copyControlsElement.style.position = "absolute";
   copyControlsElement.style.display = "flex";
+  copyControlsElement.style.alignItems = "center";
   copyControlsElement.style.gap = "4px";
-  copyControlsElement.style.padding = "4px 8px";
+  copyControlsElement.style.padding = "3px 6px";
   copyControlsElement.style.backgroundColor = "#172b4d";
   copyControlsElement.style.color = "#ffffff";
   copyControlsElement.style.borderRadius = "4px";
@@ -70,13 +74,23 @@ function createCopyControlsElement() {
   copyControlsElement.style.pointerEvents = "none";
   copyControlsElement.style.zIndex = "2147483647";
 
-  const copyTextButtonElement = createCopyButtonElement(
-    "copy text",
+  const copyIconElement = createCopyIconElement();
+
+  jiraCopyTextButtonElement = createCopyButtonElement(
+    "text",
     () => (activeJiraTicketLinkElement?.textContent ?? "").trim(),
     "Text copied",
   );
-
-  copyControlsElement.append(copyTextButtonElement);
+  jiraCopyIdButtonElement = createCopyButtonElement(
+    "id",
+    () => getJiraTicketId(activeJiraTicketLinkElement),
+    "ID copied",
+  );
+  copyControlsElement.append(
+    copyIconElement,
+    jiraCopyTextButtonElement,
+    jiraCopyIdButtonElement,
+  );
 
   if (document.body) {
     document.body.appendChild(copyControlsElement);
@@ -89,6 +103,56 @@ function createCopyControlsElement() {
   }
 
   return copyControlsElement;
+}
+
+function createCopyIconElement() {
+  const copyIconElement = document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    "svg",
+  );
+  copyIconElement.setAttribute("viewBox", "0 0 24 24");
+  copyIconElement.setAttribute("width", "14");
+  copyIconElement.setAttribute("height", "14");
+  copyIconElement.setAttribute("fill", "none");
+  copyIconElement.setAttribute("stroke", "currentColor");
+  copyIconElement.setAttribute("stroke-width", "2");
+  copyIconElement.setAttribute("stroke-linecap", "round");
+  copyIconElement.setAttribute("stroke-linejoin", "round");
+  copyIconElement.setAttribute("aria-hidden", "true");
+  copyIconElement.style.flexShrink = "0";
+
+  const backPageElement = document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    "rect",
+  );
+  backPageElement.setAttribute("x", "8");
+  backPageElement.setAttribute("y", "8");
+  backPageElement.setAttribute("width", "14");
+  backPageElement.setAttribute("height", "14");
+  backPageElement.setAttribute("rx", "2");
+
+  const frontPageElement = document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    "path",
+  );
+  frontPageElement.setAttribute(
+    "d",
+    "M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3",
+  );
+
+  copyIconElement.append(backPageElement, frontPageElement);
+  return copyIconElement;
+}
+
+function getJiraTicketId(jiraTicketLinkElement) {
+  const jiraTicketHref = jiraTicketLinkElement?.getAttribute("href") ?? "";
+  return jiraTicketHref.match(/\/browse\/([^/?#]+)/)?.[1] ?? "";
+}
+
+function updateCopyButtonPreviews() {
+  jiraCopyTextButtonElement.title =
+    (activeJiraTicketLinkElement?.textContent ?? "").trim();
+  jiraCopyIdButtonElement.title = getJiraTicketId(activeJiraTicketLinkElement);
 }
 
 function createCopyButtonElement(
@@ -104,7 +168,7 @@ function createCopyButtonElement(
   copyButtonElement.style.color = "inherit";
   copyButtonElement.style.cursor = "pointer";
   copyButtonElement.style.font = "inherit";
-  copyButtonElement.style.padding = "2px 6px";
+  copyButtonElement.style.padding = "2px 5px";
   copyButtonElement.style.borderRadius = "3px";
 
   copyButtonElement.addEventListener("mouseenter", () => {
@@ -141,8 +205,9 @@ function createCopySuccessToastElement() {
   const copySuccessToastElement = document.createElement("div");
   copySuccessToastElement.id = COPY_SUCCESS_TOAST_ID;
   copySuccessToastElement.style.position = "fixed";
-  copySuccessToastElement.style.bottom = "24px";
-  copySuccessToastElement.style.right = "24px";
+  copySuccessToastElement.style.top = "24px";
+  copySuccessToastElement.style.left = "50%";
+  copySuccessToastElement.style.transform = "translateX(-50%)";
   copySuccessToastElement.style.padding = "8px 16px";
   copySuccessToastElement.style.backgroundColor = "#172b4d";
   copySuccessToastElement.style.color = "#ffffff";
@@ -150,6 +215,7 @@ function createCopySuccessToastElement() {
   copySuccessToastElement.style.fontSize = "12px";
   copySuccessToastElement.style.fontFamily = "inherit";
   copySuccessToastElement.style.boxShadow = "0 2px 6px rgba(9, 30, 66, 0.3)";
+  copySuccessToastElement.style.zIndex = "2147483647";
   copySuccessToastElement.style.opacity = "0";
   copySuccessToastElement.style.pointerEvents = "none";
   copySuccessToastElement.style.transition = "opacity 120ms ease";
